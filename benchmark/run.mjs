@@ -133,27 +133,31 @@ function stats(values) {
   return { median: med, min, max, avg };
 }
 
+// --- Framework definitions ---
+
+const frameworks = [
+  { label: "Refract", dist: join(__dirname, "..", "demo", "dist"), port: 4001 },
+  { label: "React",   dist: join(__dirname, "react-demo", "dist"), port: 4002 },
+  { label: "Preact",  dist: join(__dirname, "preact-demo", "dist"), port: 4003 },
+];
+
 // --- Main ---
 
 const RUNS = 15;
 
 console.log("=".repeat(60));
-console.log("  Refract (freact) vs React — Load Time Benchmark");
+console.log("  Refract vs React vs Preact — Load Time Benchmark");
 console.log("=".repeat(60));
 console.log();
 
 // 1. Bundle size comparison
-const freactDist = join(__dirname, "..", "demo", "dist");
-const reactDist = join(__dirname, "react-demo", "dist");
-
 console.log("📦 BUNDLE SIZES");
 console.log("-".repeat(50));
 
-for (const [label, dir] of [["Freact", freactDist], ["React", reactDist]]) {
-  const files = getFileSizes(dir);
+for (const fw of frameworks) {
+  const files = getFileSizes(fw.dist);
   const jsFiles = files.filter((f) => f.file.endsWith(".js"));
   const cssFiles = files.filter((f) => f.file.endsWith(".css"));
-  const htmlFiles = files.filter((f) => f.file.endsWith(".html"));
 
   const totalJS = jsFiles.reduce((s, f) => s + f.raw, 0);
   const totalJSGzip = jsFiles.reduce((s, f) => s + f.gzip, 0);
@@ -162,7 +166,7 @@ for (const [label, dir] of [["Freact", freactDist], ["React", reactDist]]) {
   const totalAll = files.reduce((s, f) => s + f.raw, 0);
   const totalAllGzip = files.reduce((s, f) => s + f.gzip, 0);
 
-  console.log(`\n  ${label}:`);
+  console.log(`\n  ${fw.label}:`);
   for (const f of files) {
     console.log(`    ${f.file.padEnd(35)} ${formatBytes(f.raw).padStart(10)}  (gzip: ${formatBytes(f.gzip)})`);
   }
@@ -178,17 +182,22 @@ console.log("⏱  LOAD TIME MEASUREMENTS");
 console.log(`   (${RUNS} runs per framework, cache disabled, images blocked)`);
 console.log("-".repeat(50));
 
-const freactServer = await serveDir(freactDist, 4001);
-const reactServer = await serveDir(reactDist, 4002);
+const servers = [];
+for (const fw of frameworks) {
+  servers.push(await serveDir(fw.dist, fw.port));
+}
 
 const browser = await puppeteer.launch({ headless: true });
 
-const freactTimes = await measureLoadTime(browser, "http://localhost:4001", "Freact", RUNS);
-const reactTimes = await measureLoadTime(browser, "http://localhost:4002", "React", RUNS);
+const timings = {};
+for (const fw of frameworks) {
+  timings[fw.label] = await measureLoadTime(browser, `http://localhost:${fw.port}`, fw.label, RUNS);
+}
 
 await browser.close();
-freactServer.close();
-reactServer.close();
+for (const server of servers) {
+  server.close();
+}
 
 function printTimingTable(label, times) {
   const metrics = {
@@ -208,44 +217,55 @@ function printTimingTable(label, times) {
   }
 }
 
-printTimingTable("Freact", freactTimes);
-printTimingTable("React", reactTimes);
+for (const fw of frameworks) {
+  printTimingTable(fw.label, timings[fw.label]);
+}
 
 // 3. Summary comparison
 console.log("\n");
 console.log("📊 SUMMARY COMPARISON");
-console.log("-".repeat(50));
+console.log("-".repeat(70));
 
-const freactJSSize = getFileSizes(freactDist).filter((f) => f.file.endsWith(".js")).reduce((s, f) => s + f.raw, 0);
-const reactJSSize = getFileSizes(reactDist).filter((f) => f.file.endsWith(".js")).reduce((s, f) => s + f.raw, 0);
-const freactJSGzip = getFileSizes(freactDist).filter((f) => f.file.endsWith(".js")).reduce((s, f) => s + f.gzip, 0);
-const reactJSGzip = getFileSizes(reactDist).filter((f) => f.file.endsWith(".js")).reduce((s, f) => s + f.gzip, 0);
+function getJSSizes(dist) {
+  const files = getFileSizes(dist);
+  const jsFiles = files.filter((f) => f.file.endsWith(".js"));
+  return {
+    raw: jsFiles.reduce((s, f) => s + f.raw, 0),
+    gzip: jsFiles.reduce((s, f) => s + f.gzip, 0),
+  };
+}
 
-const freactDCL = stats(freactTimes.map((t) => t.domContentLoadedEnd));
-const reactDCL = stats(reactTimes.map((t) => t.domContentLoadedEnd));
-const freactRender = stats(freactTimes.map((t) => t.renderTime));
-const reactRender = stats(reactTimes.map((t) => t.renderTime));
+const sizes = {};
+const dclStats = {};
+const renderStats = {};
+for (const fw of frameworks) {
+  sizes[fw.label] = getJSSizes(fw.dist);
+  dclStats[fw.label] = stats(timings[fw.label].map((t) => t.domContentLoadedEnd));
+  renderStats[fw.label] = stats(timings[fw.label].map((t) => t.renderTime));
+}
 
 const col1 = 25;
-const col2 = 15;
-const col3 = 15;
-const col4 = 10;
+const col2 = 12;
+const col3 = 12;
+const col4 = 12;
+const col5 = 12;
+const col6 = 12;
 
 console.log(
-  `  ${"Metric".padEnd(col1)} ${"Freact".padStart(col2)} ${"React".padStart(col3)} ${"Ratio".padStart(col4)}`
+  `  ${"Metric".padEnd(col1)} ${"Refract".padStart(col2)} ${"React".padStart(col3)} ${"Preact".padStart(col4)} ${"vs React".padStart(col5)} ${"vs Preact".padStart(col6)}`
 );
-console.log(`  ${"─".repeat(col1 + col2 + col3 + col4 + 3)}`);
+console.log(`  ${"─".repeat(col1 + col2 + col3 + col4 + col5 + col6 + 5)}`);
 console.log(
-  `  ${"JS bundle (raw)".padEnd(col1)} ${formatBytes(freactJSSize).padStart(col2)} ${formatBytes(reactJSSize).padStart(col3)} ${(reactJSSize / freactJSSize).toFixed(1).padStart(col4 - 1)}x`
-);
-console.log(
-  `  ${"JS bundle (gzip)".padEnd(col1)} ${formatBytes(freactJSGzip).padStart(col2)} ${formatBytes(reactJSGzip).padStart(col3)} ${(reactJSGzip / freactJSGzip).toFixed(1).padStart(col4 - 1)}x`
+  `  ${"JS bundle (raw)".padEnd(col1)} ${formatBytes(sizes["Refract"].raw).padStart(col2)} ${formatBytes(sizes["React"].raw).padStart(col3)} ${formatBytes(sizes["Preact"].raw).padStart(col4)} ${((sizes["React"].raw / sizes["Refract"].raw).toFixed(1) + "x").padStart(col5)} ${((sizes["Preact"].raw / sizes["Refract"].raw).toFixed(1) + "x").padStart(col6)}`
 );
 console.log(
-  `  ${"DOMContentLoaded (med)".padEnd(col1)} ${(freactDCL.median.toFixed(2) + "ms").padStart(col2)} ${(reactDCL.median.toFixed(2) + "ms").padStart(col3)} ${(reactDCL.median / freactDCL.median).toFixed(1).padStart(col4 - 1)}x`
+  `  ${"JS bundle (gzip)".padEnd(col1)} ${formatBytes(sizes["Refract"].gzip).padStart(col2)} ${formatBytes(sizes["React"].gzip).padStart(col3)} ${formatBytes(sizes["Preact"].gzip).padStart(col4)} ${((sizes["React"].gzip / sizes["Refract"].gzip).toFixed(1) + "x").padStart(col5)} ${((sizes["Preact"].gzip / sizes["Refract"].gzip).toFixed(1) + "x").padStart(col6)}`
 );
 console.log(
-  `  ${"App render (med)".padEnd(col1)} ${(freactRender.median.toFixed(2) + "ms").padStart(col2)} ${(reactRender.median.toFixed(2) + "ms").padStart(col3)} ${(reactRender.median / freactRender.median).toFixed(1).padStart(col4 - 1)}x`
+  `  ${"DOMContentLoaded (med)".padEnd(col1)} ${(dclStats["Refract"].median.toFixed(2) + "ms").padStart(col2)} ${(dclStats["React"].median.toFixed(2) + "ms").padStart(col3)} ${(dclStats["Preact"].median.toFixed(2) + "ms").padStart(col4)} ${((dclStats["React"].median / dclStats["Refract"].median).toFixed(1) + "x").padStart(col5)} ${((dclStats["Preact"].median / dclStats["Refract"].median).toFixed(1) + "x").padStart(col6)}`
+);
+console.log(
+  `  ${"App render (med)".padEnd(col1)} ${(renderStats["Refract"].median.toFixed(2) + "ms").padStart(col2)} ${(renderStats["React"].median.toFixed(2) + "ms").padStart(col3)} ${(renderStats["Preact"].median.toFixed(2) + "ms").padStart(col4)} ${((renderStats["React"].median / renderStats["Refract"].median).toFixed(1) + "x").padStart(col5)} ${((renderStats["Preact"].median / renderStats["Refract"].median).toFixed(1) + "x").padStart(col6)}`
 );
 
 console.log("\n" + "=".repeat(60));

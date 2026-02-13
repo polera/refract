@@ -31,7 +31,7 @@ refract/
     index.ts          -- public API barrel export
   demo/               -- image gallery demo app
   tests/              -- Vitest unit tests
-  benchmark/          -- Puppeteer-based benchmark vs React
+  benchmark/          -- Puppeteer-based benchmark vs React & Preact
 ```
 
 ## Getting Started
@@ -106,38 +106,39 @@ implementation small and easy to follow.
 
 ## Benchmark
 
-The benchmark compares Refract against React 19 rendering an identical image
-gallery app (6 cards with images, captions, and a shuffle button). Both apps
-are built with Vite and served as static production bundles. Measurements are
-taken with Puppeteer over 15 runs per framework with the browser cache disabled
-and external image requests blocked.
+The benchmark compares Refract against React 19 and Preact 10 rendering an
+identical image gallery app (6 cards with images, captions, and a shuffle
+button). All three apps are built with Vite and served as static production
+bundles. Measurements are taken with Puppeteer over 15 runs per framework with
+the browser cache disabled and external image requests blocked.
 
 ### Bundle Size
 
-| Metric           | Refract   | React      | Ratio |
-|------------------|-----------|------------|-------|
-| JS bundle (raw)  | 3.49 kB   | 189.74 kB  | 54.4x |
-| JS bundle (gzip) | 1.45 kB   | 59.52 kB   | 41.1x |
-| All assets (raw) | 4.76 kB   | 191.01 kB  | 40.1x |
+| Metric           | Refract   | React      | Preact    |
+|------------------|-----------|------------|-----------|
+| JS bundle (raw)  | 3.49 kB   | 189.74 kB  | 14.46 kB  |
+| JS bundle (gzip) | 1.45 kB   | 59.52 kB   | 5.95 kB   |
+| All assets (raw) | 4.76 kB   | 191.01 kB  | 15.74 kB  |
 
 ### Load Time (median of 15 runs)
 
-| Metric           | Refract  | React    | Ratio |
-|------------------|----------|----------|-------|
-| DOM Interactive   | 7.00 ms  | 6.80 ms  | ~1.0x |
-| DOMContentLoaded  | 10.80 ms | 19.90 ms | 1.8x  |
-| App Render (rAF)  | <0.1 ms  | 0.10 ms  | ~1.0x |
+| Metric           | Refract  | React    | Preact   |
+|------------------|----------|----------|----------|
+| DOM Interactive   | 6.90 ms  | 6.80 ms  | 6.70 ms  |
+| DOMContentLoaded  | 10.90 ms | 18.60 ms | 10.80 ms |
+| App Render (rAF)  | 0.10 ms  | 0.10 ms  | <0.1 ms  |
 
-Refract's production JS bundle is over 54x smaller than React's before
-compression and 41x smaller after gzip. The DOMContentLoaded time -- which
-reflects the cost of downloading, parsing, and executing JavaScript -- is
-roughly 1.8x faster with Refract. Actual app render time (measured via
-requestAnimationFrame after the framework populates the DOM) is negligible for
-both frameworks at this scale.
+Refract's production JS bundle is over 54x smaller than React's and 4x smaller
+than Preact's before compression. After gzip, Refract is 41x smaller than React
+and 4x smaller than Preact. The DOMContentLoaded time -- which reflects the
+cost of downloading, parsing, and executing JavaScript -- is roughly 1.7x
+faster with Refract compared to React and on par with Preact. Actual app render
+time (measured via requestAnimationFrame after the framework populates the DOM)
+is negligible for all three frameworks at this scale.
 
 ### Running the Benchmark
 
-Build both demo apps, then run the benchmark script:
+Build all three demo apps, then run the benchmark script:
 
 ```sh
 # Build the Refract demo
@@ -146,9 +147,63 @@ yarn build
 # Build the React demo
 cd benchmark/react-demo && yarn install && yarn build && cd ../..
 
+# Build the Preact demo
+cd benchmark/preact-demo && yarn install && yarn build && cd ../..
+
 # Install benchmark dependencies and run
 cd benchmark && yarn install && yarn bench
 ```
+
+## Feature Matrix
+
+How Refract compares to React and Preact:
+
+| Feature                        | Refract | React | Preact |
+|--------------------------------|---------|-------|--------|
+| **Core**                       |         |       |        |
+| Virtual DOM                    | Yes     | Yes   | Yes    |
+| createElement                  | Yes     | Yes   | Yes    |
+| Reconciliation / diffing       | Yes     | Yes   | Yes    |
+| Keyed reconciliation           | No      | Yes   | Yes    |
+| Fragments                      | No      | Yes   | Yes    |
+| JSX support                    | Yes     | Yes   | Yes    |
+| **Components**                 |         |       |        |
+| Functional components          | Yes     | Yes   | Yes    |
+| Class components               | No      | Yes   | Yes    |
+| **Hooks**                      |         |       |        |
+| useState                       | No      | Yes   | Yes    |
+| useEffect / useLayoutEffect    | No      | Yes   | Yes    |
+| useRef                         | No      | Yes   | Yes    |
+| useMemo / useCallback          | No      | Yes   | Yes    |
+| useReducer                     | No      | Yes   | Yes    |
+| useContext                      | No      | Yes   | Yes    |
+| useId                          | No      | Yes   | Yes    |
+| useTransition / useDeferredValue | No    | Yes   | No     |
+| **State & Data Flow**          |         |       |        |
+| Built-in state management      | No      | Yes   | Yes    |
+| Context API                    | No      | Yes   | Yes    |
+| Refs (createRef / forwardRef)  | No      | Yes   | Yes    |
+| **Rendering**                  |         |       |        |
+| Event handling                 | Yes     | Yes   | Yes    |
+| Style objects                  | Yes     | Yes   | Yes    |
+| className prop                 | Yes     | Yes   | Yes¹   |
+| Portals                        | No      | Yes   | Yes    |
+| Suspense / lazy                | No      | Yes   | Yes²   |
+| Error boundaries               | No      | Yes   | Yes    |
+| Server-side rendering          | No      | Yes   | Yes    |
+| Hydration                      | No      | Yes   | Yes    |
+| **Performance**                |         |       |        |
+| Fiber architecture             | No      | Yes   | No     |
+| Concurrent rendering           | No      | Yes   | No     |
+| Automatic batching             | No      | Yes   | Yes    |
+| memo / PureComponent           | No      | Yes   | Yes    |
+| **Ecosystem**                  |         |       |        |
+| DevTools                       | No      | Yes   | Yes    |
+| React compatibility layer      | N/A     | N/A   | Yes    |
+| **Bundle Size (gzip)**         | ~1.5 kB | ~60 kB | ~6 kB |
+
+¹ Preact supports both `class` and `className`.
+² Preact has partial Suspense support via `preact/compat`.
 
 ## License
 
