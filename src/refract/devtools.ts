@@ -1,4 +1,5 @@
 import type { Fiber, Props } from "./types.js";
+import { registerCommitHandler } from "./runtimeExtensions.js";
 
 export const DEVTOOLS_GLOBAL_HOOK = "__REFRACT_DEVTOOLS_GLOBAL_HOOK__";
 
@@ -66,6 +67,8 @@ export function reportDevtoolsCommit(rootFiber: Fiber, deletions: Fiber[]): void
     }
   }
 }
+
+registerCommitHandler(reportDevtoolsCommit);
 
 function resolveHook(): RefractDevtoolsHook | null {
   if (explicitHook !== undefined) return explicitHook;

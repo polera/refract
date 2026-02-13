@@ -25,6 +25,10 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Setup Chrome
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+
       - name: Install root dependencies
         run: yarn install --frozen-lockfile
 
@@ -38,4 +42,6 @@ jobs:
         run: yarn --cwd benchmark/preact-demo install --frozen-lockfile
 
       - name: Run benchmark guardrails
+        env:
+          PUPPETEER_EXECUTABLE_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: make bench-ci

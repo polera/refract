@@ -1,6 +1,6 @@
-import { createElement, render, useState } from "../src/refract/index.js";
+import { createElement, render } from "../src/refract/core.js";
+import { useState } from "../src/refract/features/hooks.js";
 import type { Props } from "../src/refract/types.js";
-import { mountInspector } from "./inspector.js";
 
 const images = [
   { src: "https://picsum.photos/seed/refract1/400/300", alt: "Mountain landscape", caption: "Mountains" },
@@ -57,7 +57,10 @@ function shouldMountInspector(): boolean {
   return value !== "0" && value !== "false";
 }
 
-if (shouldMountInspector()) {
-  mountInspector(document.getElementById("inspector-root"));
+const inspectorEnabled = import.meta.env.DEV || import.meta.env.VITE_REFRACT_ENABLE_INSPECTOR === "1";
+if (inspectorEnabled && shouldMountInspector()) {
+  void import("./inspector.js").then(({ mountInspector }) => {
+    mountInspector(document.getElementById("inspector-root"));
+  });
 }
 render(createElement(App, null), document.getElementById("app")!);
