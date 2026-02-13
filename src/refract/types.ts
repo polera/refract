@@ -40,6 +40,7 @@ export interface Fiber {
   child: Fiber | null;
   sibling: Fiber | null;
   hooks: Hook[] | null;
+  _hookIndex?: number;
   alternate: Fiber | null;
   flags: number;
 }

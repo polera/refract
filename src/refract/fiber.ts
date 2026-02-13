@@ -1,10 +1,9 @@
-import type { VNode, Fiber, Props } from "./types.js";
+import type { VNode, Fiber, Props, Hook } from "./types.js";
 import { PLACEMENT, UPDATE, DELETION } from "./types.js";
 import { reconcileChildren } from "./reconcile.js";
 
 /** Module globals for hook system */
 export let currentFiber: Fiber | null = null;
-export let hookIndex = 0;
 
 /** Store root fiber per container */
 const roots = new WeakMap<Node, Fiber>();
@@ -84,6 +83,7 @@ export function renderFiber(vnode: VNode, container: Node): void {
   deletions = [];
   performWork(rootFiber);
   commitRoot(rootFiber);
+  runEffects(rootFiber);
   roots.set(container, rootFiber);
 }
 
@@ -93,7 +93,7 @@ function performWork(fiber: Fiber): void {
 
   if (isComponent) {
     currentFiber = fiber;
-    hookIndex = 0;
+    fiber._hookIndex = 0;
     if (!fiber.hooks) fiber.hooks = [];
 
     const comp = fiber.type as (props: Props) => VNode;
@@ -163,6 +163,8 @@ function commitWork(fiber: Fiber): void {
 }
 
 function commitDeletion(fiber: Fiber): void {
+  // Run effect cleanups on deleted fibers
+  runCleanups(fiber);
   if (fiber.dom) {
     fiber.dom.parentNode?.removeChild(fiber.dom);
   } else if (fiber.child) {
@@ -170,17 +172,64 @@ function commitDeletion(fiber: Fiber): void {
   }
 }
 
+/** Run effect cleanups for a fiber and its children */
+function runCleanups(fiber: Fiber): void {
+  if (fiber.hooks) {
+    for (const hook of fiber.hooks) {
+      const s = hook.state as { cleanup?: () => void } | undefined;
+      if (s?.cleanup) {
+        s.cleanup();
+        s.cleanup = undefined;
+      }
+    }
+  }
+  if (fiber.child) runCleanups(fiber.child);
+  if (fiber.sibling) runCleanups(fiber.sibling);
+}
+
+/** Run pending effects after commit (depth-first) */
+function runEffects(fiber: Fiber): void {
+  if (fiber.hooks) {
+    for (const hook of fiber.hooks) {
+      const s = hook.state as {
+        effect?: () => void | (() => void);
+        pending?: boolean;
+        cleanup?: () => void;
+      } | undefined;
+      if (s?.pending && s.effect) {
+        if (s.cleanup) s.cleanup();
+        s.cleanup = s.effect() || undefined;
+        s.pending = false;
+      }
+    }
+  }
+  if (fiber.child) runEffects(fiber.child);
+  if (fiber.sibling) runEffects(fiber.sibling);
+}
+
+/** Pending containers that need re-render */
+const pendingContainers = new Set<Node>();
+let flushScheduled = false;
+
 /** Schedule a re-render of a fiber (used by useState) */
 export function scheduleRender(fiber: Fiber): void {
   let root = fiber;
   while (root.parent) {
     root = root.parent;
   }
+  pendingContainers.add(root.dom!);
 
-  const container = root.dom!;
-  queueMicrotask(() => {
+  if (!flushScheduled) {
+    flushScheduled = true;
+    queueMicrotask(flushRenders);
+  }
+}
+
+function flushRenders(): void {
+  flushScheduled = false;
+  for (const container of pendingContainers) {
     const currentRoot = roots.get(container);
-    if (!currentRoot) return;
+    if (!currentRoot) continue;
 
     const newRoot: Fiber = {
       type: currentRoot.type,
@@ -198,6 +247,8 @@ export function scheduleRender(fiber: Fiber): void {
     deletions = [];
     performWork(newRoot);
     commitRoot(newRoot);
+    runEffects(newRoot);
     roots.set(container, newRoot);
-  });
+  }
+  pendingContainers.clear();
 }
