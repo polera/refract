@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createElement } from "../src/refract/createElement.js";
 import { render } from "../src/refract/render.js";
-import { useState, useEffect, useRef } from "../src/refract/hooks.js";
+import { useState, useEffect, useRef, useMemo, useCallback, useReducer } from "../src/refract/hooks.js";
 
 describe("hooks", () => {
   let container: HTMLDivElement;
@@ -158,6 +158,98 @@ describe("hooks", () => {
       setValue(5);
       await new Promise((r) => setTimeout(r, 10));
       expect(ref.current).toBe(5);
+    });
+  });
+
+  describe("useMemo", () => {
+    it("memoizes value based on deps", async () => {
+      let computeCount = 0;
+      let setValue!: (v: number) => void;
+      function App() {
+        const [value, sv] = useState(0);
+        setValue = sv;
+        const memoized = useMemo(() => {
+          computeCount++;
+          return value * 2;
+        }, [value]);
+        return createElement("span", null, String(memoized));
+      }
+      render(createElement(App, null), container);
+      expect(computeCount).toBe(1);
+      expect(container.querySelector("span")!.textContent).toBe("0");
+
+      setValue(5);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(computeCount).toBe(2);
+      expect(container.querySelector("span")!.textContent).toBe("10");
+    });
+
+    it("skips recomputation when deps unchanged", async () => {
+      let computeCount = 0;
+      let setOther!: (v: number) => void;
+      function App() {
+        const [other, so] = useState(0);
+        setOther = so;
+        const memoized = useMemo(() => {
+          computeCount++;
+          return "fixed";
+        }, []);
+        return createElement("span", null, `${memoized}-${other}`);
+      }
+      render(createElement(App, null), container);
+      expect(computeCount).toBe(1);
+
+      setOther(1);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(computeCount).toBe(1); // Not recomputed
+    });
+  });
+
+  describe("useCallback", () => {
+    it("returns stable callback when deps unchanged", async () => {
+      const callbacks: (() => void)[] = [];
+      let setValue!: (v: number) => void;
+      function App() {
+        const [value, sv] = useState(0);
+        setValue = sv;
+        const cb = useCallback(() => {}, []);
+        callbacks.push(cb);
+        return createElement("span", null, String(value));
+      }
+      render(createElement(App, null), container);
+
+      setValue(1);
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(callbacks[0]).toBe(callbacks[1]);
+    });
+  });
+
+  describe("useReducer", () => {
+    it("dispatches actions through reducer", async () => {
+      type Action = { type: "inc" } | { type: "dec" };
+      let dispatch!: (action: Action) => void;
+      function Counter() {
+        const [count, d] = useReducer((state: number, action: Action) => {
+          if (action.type === "inc") return state + 1;
+          if (action.type === "dec") return state - 1;
+          return state;
+        }, 0);
+        dispatch = d;
+        return createElement("span", null, String(count));
+      }
+      render(createElement(Counter, null), container);
+      expect(container.querySelector("span")!.textContent).toBe("0");
+
+      dispatch({ type: "inc" });
+      dispatch({ type: "inc" });
+      dispatch({ type: "inc" });
+      await new Promise((r) => setTimeout(r, 10));
+      expect(container.querySelector("span")!.textContent).toBe("3");
+
+      dispatch({ type: "dec" });
+      await new Promise((r) => setTimeout(r, 10));
+      expect(container.querySelector("span")!.textContent).toBe("2");
     });
   });
 });

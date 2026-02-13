@@ -82,6 +82,37 @@ export function useRef<T>(initial: T): { current: T } {
   return hook.state as { current: T };
 }
 
+export function useMemo<T>(factory: () => T, deps: unknown[]): T {
+  const hook = getHook();
+
+  if (hook.state === undefined) {
+    hook.state = { value: factory(), deps };
+  } else {
+    const s = hook.state as { value: T; deps: unknown[] };
+    if (depsChanged(s.deps, deps)) {
+      s.value = factory();
+      s.deps = deps;
+    }
+  }
+
+  return (hook.state as { value: T }).value;
+}
+
+export function useCallback<T extends Function>(cb: T, deps: unknown[]): T {
+  return useMemo(() => cb, deps);
+}
+
+export function useReducer<S, A>(
+  reducer: (state: S, action: A) => S,
+  initialState: S,
+): [S, (action: A) => void] {
+  const [state, setState] = useState(initialState);
+  const dispatch = (action: A) => {
+    setState((prev) => reducer(prev, action));
+  };
+  return [state, dispatch];
+}
+
 export function depsChanged(
   oldDeps: unknown[] | undefined,
   newDeps: unknown[] | undefined,
