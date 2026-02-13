@@ -1,6 +1,7 @@
 import type { VNode, Fiber, Props, Hook } from "./types.js";
 import { PLACEMENT, UPDATE, DELETION } from "./types.js";
 import { reconcileChildren } from "./reconcile.js";
+import { Fragment } from "./createElement.js";
 
 /** Module globals for hook system */
 export let currentFiber: Fiber | null = null;
@@ -8,6 +9,14 @@ export let currentFiber: Fiber | null = null;
 /** Store root fiber per container */
 const roots = new WeakMap<Node, Fiber>();
 let deletions: Fiber[] = [];
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const SVG_TAGS = new Set([
+  "svg", "circle", "ellipse", "line", "path", "polygon", "polyline",
+  "rect", "g", "defs", "use", "text", "tspan", "image", "clipPath",
+  "mask", "pattern", "marker", "linearGradient", "radialGradient", "stop",
+  "foreignObject", "symbol", "desc", "title",
+]);
 
 export function pushDeletion(fiber: Fiber): void {
   deletions.push(fiber);
@@ -18,9 +27,24 @@ export function createDom(fiber: Fiber): Node {
   if (fiber.type === "TEXT") {
     return document.createTextNode(fiber.props.nodeValue as string);
   }
-  const el = document.createElement(fiber.type as string);
-  applyProps(el, {}, fiber.props);
+  const tag = fiber.type as string;
+  const isSvg = SVG_TAGS.has(tag) || isSvgContext(fiber);
+  const el = isSvg
+    ? document.createElementNS(SVG_NS, tag)
+    : document.createElement(tag);
+  applyProps(el as HTMLElement, {}, fiber.props);
   return el;
+}
+
+/** Check if a fiber is inside an SVG context */
+function isSvgContext(fiber: Fiber): boolean {
+  let f = fiber.parent;
+  while (f) {
+    if (f.type === "svg") return true;
+    if (typeof f.type === "string" && f.type !== "svg" && f.dom) return false;
+    f = f.parent;
+  }
+  return false;
 }
 
 /** Apply props to a DOM element, diffing against old props */
@@ -90,6 +114,7 @@ export function renderFiber(vnode: VNode, container: Node): void {
 /** Depth-first work loop: call components, diff children */
 function performWork(fiber: Fiber): void {
   const isComponent = typeof fiber.type === "function";
+  const isFragment = fiber.type === Fragment;
 
   if (isComponent) {
     currentFiber = fiber;
@@ -99,6 +124,9 @@ function performWork(fiber: Fiber): void {
     const comp = fiber.type as (props: Props) => VNode;
     const children = [comp(fiber.props)];
     reconcileChildren(fiber, children);
+  } else if (isFragment) {
+    // Fragments have no DOM — children attach to nearest parent DOM
+    reconcileChildren(fiber, fiber.props.children ?? []);
   } else {
     if (!fiber.dom) {
       fiber.dom = createDom(fiber);
@@ -122,6 +150,32 @@ function performWork(fiber: Fiber): void {
   }
 }
 
+/** Find the next DOM sibling for insertion (skips fragments/components and uncommitted nodes) */
+function getNextDomSibling(fiber: Fiber): Node | null {
+  let sib: Fiber | null = fiber.sibling;
+  while (sib) {
+    if (sib.dom && !(sib.flags & PLACEMENT)) return sib.dom;
+    if (!sib.dom && sib.child) {
+      const childDom = getFirstCommittedDom(sib);
+      if (childDom) return childDom;
+    }
+    sib = sib.sibling;
+  }
+  return null;
+}
+
+/** Get the first committed DOM node in a fiber subtree */
+function getFirstCommittedDom(fiber: Fiber): Node | null {
+  if (fiber.dom && !(fiber.flags & PLACEMENT)) return fiber.dom;
+  let child = fiber.child;
+  while (child) {
+    const dom = getFirstCommittedDom(child);
+    if (dom) return dom;
+    child = child.sibling;
+  }
+  return null;
+}
+
 /** Commit all DOM mutations */
 function commitRoot(rootFiber: Fiber): void {
   for (const fiber of deletions) {
@@ -140,7 +194,12 @@ function commitWork(fiber: Fiber): void {
   const parentDom = parentFiber!.dom!;
 
   if (fiber.flags & PLACEMENT && fiber.dom) {
-    parentDom.appendChild(fiber.dom);
+    const before = getNextDomSibling(fiber);
+    if (before) {
+      parentDom.insertBefore(fiber.dom, before);
+    } else {
+      parentDom.appendChild(fiber.dom);
+    }
   } else if (fiber.flags & UPDATE && fiber.dom) {
     if (fiber.type === "TEXT") {
       const oldValue = fiber.alternate?.props.nodeValue;
@@ -163,16 +222,19 @@ function commitWork(fiber: Fiber): void {
 }
 
 function commitDeletion(fiber: Fiber): void {
-  // Run effect cleanups on deleted fibers
   runCleanups(fiber);
   if (fiber.dom) {
     fiber.dom.parentNode?.removeChild(fiber.dom);
   } else if (fiber.child) {
-    commitDeletion(fiber.child);
+    // Fragment/component — delete children
+    let child: Fiber | null = fiber.child;
+    while (child) {
+      commitDeletion(child);
+      child = child.sibling;
+    }
   }
 }
 
-/** Run effect cleanups for a fiber and its children */
 function runCleanups(fiber: Fiber): void {
   if (fiber.hooks) {
     for (const hook of fiber.hooks) {
@@ -187,7 +249,6 @@ function runCleanups(fiber: Fiber): void {
   if (fiber.sibling) runCleanups(fiber.sibling);
 }
 
-/** Run pending effects after commit (depth-first) */
 function runEffects(fiber: Fiber): void {
   if (fiber.hooks) {
     for (const hook of fiber.hooks) {
@@ -207,11 +268,9 @@ function runEffects(fiber: Fiber): void {
   if (fiber.sibling) runEffects(fiber.sibling);
 }
 
-/** Pending containers that need re-render */
 const pendingContainers = new Set<Node>();
 let flushScheduled = false;
 
-/** Schedule a re-render of a fiber (used by useState) */
 export function scheduleRender(fiber: Fiber): void {
   let root = fiber;
   while (root.parent) {

@@ -1,5 +1,7 @@
 import type { VNode, VNodeType, Props } from "./types.js";
 
+export const Fragment = Symbol.for("refract.fragment");
+
 type Child = VNode | string | number | boolean | null | undefined | Child[];
 
 export function createElement(
