@@ -1,60 +1,74 @@
-import type { VNode } from "./types.js";
-import { createDom, applyProps } from "./render.js";
+import type { VNode, Fiber } from "./types.js";
+import { PLACEMENT, UPDATE, DELETION } from "./types.js";
+import { pushDeletion } from "./fiber.js";
 
-/**
- * Reconciles the DOM at `parent.childNodes[index]` from oldVNode to newVNode.
- * Performs minimal DOM mutations.
- */
-export function reconcile(
-  parent: Node,
-  oldVNode: VNode,
-  newVNode: VNode,
-  index: number,
-): void {
-  const existingNode = parent.childNodes[index];
+/** Reconcile a fiber's children against a new list of VNodes */
+export function reconcileChildren(parentFiber: Fiber, children: VNode[]): void {
+  let oldFiber = parentFiber.alternate?.child ?? null;
+  let prevSibling: Fiber | null = null;
+  let i = 0;
 
-  // Node doesn't exist yet — append
-  if (!existingNode) {
-    parent.appendChild(createDom(newVNode));
-    return;
-  }
+  while (i < children.length || oldFiber) {
+    const child = i < children.length ? children[i] : null;
+    let newFiber: Fiber | null = null;
 
-  // Type changed — replace the entire node
-  if (oldVNode.type !== newVNode.type) {
-    parent.replaceChild(createDom(newVNode), existingNode);
-    return;
-  }
+    const sameType = oldFiber && child && oldFiber.type === child.type;
 
-  // Text node — update value if needed
-  if (newVNode.type === "TEXT") {
-    if (oldVNode.props.nodeValue !== newVNode.props.nodeValue) {
-      existingNode.textContent = newVNode.props.nodeValue as string;
+    if (sameType && oldFiber && child) {
+      // Update: reuse the DOM node
+      newFiber = {
+        type: oldFiber.type,
+        props: child.props,
+        key: child.key,
+        dom: oldFiber.dom,
+        parentDom: parentFiber.dom ?? parentFiber.parentDom,
+        parent: parentFiber,
+        child: null,
+        sibling: null,
+        hooks: oldFiber.hooks,
+        alternate: oldFiber,
+        flags: UPDATE,
+      };
     }
-    return;
-  }
 
-  // Same element type — diff props and recurse into children
-  applyProps(
-    existingNode as HTMLElement,
-    oldVNode.props,
-    newVNode.props,
-  );
-
-  const oldChildren = oldVNode.props.children ?? [];
-  const newChildren = newVNode.props.children ?? [];
-  const maxLen = Math.max(oldChildren.length, newChildren.length);
-
-  for (let i = 0; i < maxLen; i++) {
-    if (i >= newChildren.length) {
-      // Extra old child — remove it (always remove the last one)
-      const child = existingNode.childNodes[newChildren.length];
-      if (child) existingNode.removeChild(child);
-    } else if (i >= oldChildren.length) {
-      // New child — append
-      existingNode.appendChild(createDom(newChildren[i]));
-    } else {
-      // Both exist — reconcile
-      reconcile(existingNode, oldChildren[i], newChildren[i], i);
+    if (child && !sameType) {
+      // Placement: new node
+      newFiber = {
+        type: child.type,
+        props: child.props,
+        key: child.key,
+        dom: null,
+        parentDom: parentFiber.dom ?? parentFiber.parentDom,
+        parent: parentFiber,
+        child: null,
+        sibling: null,
+        hooks: null,
+        alternate: null,
+        flags: PLACEMENT,
+      };
     }
+
+    if (oldFiber && !sameType) {
+      // Deletion: old node removed
+      oldFiber.flags = DELETION;
+      pushDeletion(oldFiber);
+    }
+
+    // Advance old fiber
+    if (oldFiber) {
+      oldFiber = oldFiber.sibling;
+    }
+
+    // Link into fiber tree
+    if (i === 0) {
+      parentFiber.child = newFiber;
+    } else if (prevSibling && newFiber) {
+      prevSibling.sibling = newFiber;
+    }
+
+    if (newFiber) {
+      prevSibling = newFiber;
+    }
+    i++;
   }
 }

@@ -8,6 +8,7 @@ describe("createElement", () => {
     expect(vnode.props.src).toBe("cat.jpg");
     expect(vnode.props.alt).toBe("A cat");
     expect(vnode.props.children).toBeUndefined();
+    expect(vnode.key).toBeNull();
   });
 
   it("creates an element with string children as text nodes", () => {
@@ -46,12 +47,13 @@ describe("createElement", () => {
     expect(vnode.props.children![0].type).toBe("TEXT");
   });
 
-  it("invokes functional components", () => {
+  it("retains function type for components (deferred)", () => {
     const MyImg = (props: Record<string, unknown>) =>
       createElement("img", { src: props.src as string });
 
     const vnode = createElement(MyImg, { src: "photo.jpg" });
-    expect(vnode.type).toBe("img");
+    // Components are NOT called eagerly — type stays as the function
+    expect(vnode.type).toBe(MyImg);
     expect(vnode.props.src).toBe("photo.jpg");
   });
 
@@ -59,5 +61,11 @@ describe("createElement", () => {
     const vnode = createElement("span", null, 42);
     expect(vnode.props.children).toHaveLength(1);
     expect(vnode.props.children![0].props.nodeValue).toBe("42");
+  });
+
+  it("extracts key from props", () => {
+    const vnode = createElement("div", { key: "abc", className: "x" });
+    expect(vnode.key).toBe("abc");
+    expect(vnode.props.key).toBeUndefined();
   });
 });
