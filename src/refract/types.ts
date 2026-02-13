@@ -41,6 +41,7 @@ export interface Fiber {
   sibling: Fiber | null;
   hooks: Hook[] | null;
   _hookIndex?: number;
+  _contexts?: Map<number, unknown>;
   alternate: Fiber | null;
   flags: number;
 }
