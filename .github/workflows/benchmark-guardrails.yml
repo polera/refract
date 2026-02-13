@@ -14,7 +14,8 @@ jobs:
     env:
       CI_RUNS: 40
       CI_WARMUP: 5
-      CI_DCL_P95_MAX: 16
+      CI_DCL_P95_MAX: 1000
+      CI_DCL_P95_MAX_DELTA_MS: 2
       CI_DCL_SD_MAX: 2
     steps:
       - name: Checkout
@@ -44,4 +45,49 @@ jobs:
       - name: Run benchmark guardrails
         env:
           PUPPETEER_EXECUTABLE_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
-        run: make bench-ci
+        run: |
+          set -euo pipefail
+          make bench-ci | tee benchmark-output.txt
+
+          node <<'EOF'
+          const fs = require("node:fs");
+
+          const output = fs.readFileSync("benchmark-output.txt", "utf8");
+          const p95Line = output
+            .split(/\r?\n/)
+            .find((line) => line.includes("DOMContentLoaded (p95)"));
+
+          if (!p95Line) {
+            console.error("Could not find the DOMContentLoaded (p95) summary line in benchmark output.");
+            process.exit(1);
+          }
+
+          const values = [...p95Line.matchAll(/([0-9]+(?:\.[0-9]+)?)ms/g)].map((match) => Number(match[1]));
+          if (values.length < 3) {
+            console.error(`Expected Refract/React/Preact p95 values, got: ${p95Line}`);
+            process.exit(1);
+          }
+
+          const [refractP95, , preactP95] = values;
+          const deltaMax = Number(process.env.CI_DCL_P95_MAX_DELTA_MS ?? "2");
+          if (!Number.isFinite(deltaMax) || deltaMax < 0) {
+            console.error(`Invalid CI_DCL_P95_MAX_DELTA_MS value: ${process.env.CI_DCL_P95_MAX_DELTA_MS}`);
+            process.exit(1);
+          }
+
+          const allowedMax = preactP95 + deltaMax;
+          if (refractP95 > allowedMax) {
+            console.error(
+              `Guardrail failed: Refract p95 max ${refractP95.toFixed(2)}ms is more than ` +
+                `${deltaMax.toFixed(2)}ms slower than Preact ${preactP95.toFixed(2)}ms ` +
+                `(allowed max: ${allowedMax.toFixed(2)}ms).`,
+            );
+            process.exit(1);
+          }
+
+          console.log(
+            `Guardrail passed: Refract p95 max ${refractP95.toFixed(2)}ms <= ` +
+              `Preact p95 ${preactP95.toFixed(2)}ms + ${deltaMax.toFixed(2)}ms ` +
+              `(allowed max: ${allowedMax.toFixed(2)}ms).`,
+          );
+          EOF
