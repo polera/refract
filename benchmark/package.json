@@ -1,0 +1,13 @@
+{
+  "name": "refract-benchmark",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bench": "node run.mjs"
+  },
+  "devDependencies": {
+    "puppeteer": "^24.6.0",
+    "sirv": "^3.0.1"
+  }
+}
