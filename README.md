@@ -3,7 +3,7 @@
 A minimal React-like virtual DOM library focused on image rendering. Refract
 implements the core ideas behind React -- a virtual DOM, createElement, render,
 reconciliation, hooks, context, and memo -- in TypeScript, producing a
-JavaScript bundle roughly 21x smaller than React.
+JavaScript bundle roughly 22x smaller than React.
 
 ## LLM Disclosure
 I generated this using Claude Opus 4.6 and gpt-5.3-codex as an experiment.
@@ -63,6 +63,13 @@ Run the tests:
 ```sh
 yarn test
 ```
+
+## Entrypoints
+
+- `refract/core` -- minimal runtime surface (`createElement`, `Fragment`, `render`)
+- `refract/full` -- complete API including hooks, context, memo, sanitizer, and devtools integration
+- `refract` -- alias of `refract/full` for backward compatibility
+- Feature entrypoints for custom bundles: `refract/hooks`, `refract/context`, `refract/memo`, `refract/security`, `refract/devtools`
 
 ## API
 
@@ -154,27 +161,45 @@ The results below are from a local run on February 13, 2026.
 
 | Metric           | Refract   | React      | Preact    |
 |------------------|-----------|------------|-----------|
-| JS bundle (raw)  | 8.92 kB   | 189.74 kB  | 14.46 kB  |
-| JS bundle (gzip) | 3.42 kB   | 59.52 kB   | 5.95 kB   |
-| All assets (raw) | 10.19 kB  | 191.01 kB  | 15.74 kB  |
+| JS bundle (raw)  | 8.48 kB   | 189.74 kB  | 14.46 kB  |
+| JS bundle (gzip) | 3.26 kB   | 59.52 kB   | 5.95 kB   |
+| All assets (raw) | 11.27 kB  | 191.01 kB  | 15.74 kB  |
 
 ### Load Time (median of 15 runs)
 
 | Metric           | Refract   | React     | Preact    |
 |------------------|-----------|-----------|-----------|
-| DOM Interactive   | 6.90 ms   | 6.60 ms   | 6.40 ms   |
-| DOMContentLoaded  | 11.00 ms  | 18.40 ms  | 10.60 ms  |
-| App Render (rAF)  | <0.1 ms   | <0.1 ms   | <0.1 ms   |
+| DOM Interactive   | 6.70 ms   | 6.50 ms   | 6.60 ms   |
+| DOMContentLoaded  | 11.60 ms  | 18.60 ms  | 11.90 ms  |
+| App Render (rAF)  | <0.1 ms   | <0.1 ms   | 0.1 ms    |
 
-Refract's production JS bundle is ~21.3x smaller than React's and ~1.6x smaller
-than Preact's before compression. After gzip, Refract is ~17.4x smaller than
-React and ~1.7x smaller than Preact. Despite now including hooks, context, memo,
-keyed reconciliation, fragments, error boundaries, a default HTML sanitizer, and
-a fiber architecture, the bundle remains under 9 kB uncompressed. The DOMContentLoaded time --
-which reflects the cost of downloading, parsing, and executing JavaScript -- is
-roughly 1.7x faster with Refract compared to React and close to Preact in this
-run (11.0 ms vs 10.6 ms). Actual app render time is negligible for all three
-frameworks at this scale.
+Refract's production JS bundle is ~22.4x smaller than React's and ~1.7x smaller
+than Preact's before compression. After gzip, Refract is ~18.2x smaller than
+React and ~1.8x smaller than Preact. With the current feature set (hooks,
+context, memo, keyed reconciliation, fragments, error boundaries, sanitizer, and
+fiber architecture), Refract is still small in absolute terms at ~8.5 kB raw /
+~3.3 kB gzip for JS. The DOMContentLoaded median is ~1.6x faster than React and
+slightly faster than Preact in this run (11.6 ms vs 11.9 ms). App render time is
+negligible for all three frameworks at this scale.
+
+### Component Combination Benchmarks (Vitest)
+
+`benchmark/components.bench.ts` runs 16 component combinations (`memo`,
+`context`, `fragment`, `keyed`) across two phases each (mount + reconcile).
+Higher `hz` is better.
+
+| Component usage profile | Mount (hz) | Mount vs base | Reconcile (hz) | Reconcile vs base |
+|-------------------------|------------|---------------|----------------|-------------------|
+| `base` | 6470.45 | baseline | 4871.40 | baseline |
+| `memo` | 7582.27 | +17.2% | 4601.29 | -5.6% |
+| `context` | 7815.08 | +20.8% | 6457.19 | +32.6% |
+| `fragment` | 7799.50 | +20.5% | 6185.38 | +27.0% |
+| `keyed` | 7456.51 | +15.2% | 6738.82 | +38.3% |
+| `memo+context+keyed` | 8098.85 | +25.2% | 7179.70 | +47.4% |
+| `memo+fragment+keyed` | 5587.46 | -13.7% | 7329.55 | +50.5% |
+
+In this run, `memo+context+keyed` was the fastest mount profile, while
+`memo+fragment+keyed` was the fastest reconcile profile.
 
 ### Running the Benchmark
 
@@ -189,6 +214,9 @@ make bench-stress
 
 # CI guardrails (fails if Refract DOMContentLoaded p95/sd exceed thresholds)
 make bench-ci
+
+# Component-combination microbenchmarks (32 cases)
+yarn bench:components
 ```
 
 Custom run counts and thresholds:
@@ -254,7 +282,7 @@ How Refract compares to React and Preact:
 | **Ecosystem**                  |         |       |        |
 | DevTools                       | Basic (hook API) | Yes   | Yes    |
 | React compatibility layer      | N/A     | N/A   | Yes    |
-| **Bundle Size (gzip)**         | ~3.4 kB | ~59.5 kB | ~6.0 kB |
+| **Bundle Size (gzip)**         | ~3.3 kB | ~59.5 kB | ~6.0 kB |
 
 ¹ Preact supports both `class` and `className`.
 ² Preact has partial Suspense support via `preact/compat`.

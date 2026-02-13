@@ -204,6 +204,8 @@ const WARMUP_RUNS = readNonNegativeInt("BENCH_WARMUP", 3);
 const GUARDRAILS_ENABLED = process.env.BENCH_GUARDRAILS === "1";
 const DCL_P95_MAX = readPositiveFloat("BENCH_GUARDRAIL_DCL_P95_MAX", 16);
 const DCL_SD_MAX = readPositiveFloat("BENCH_GUARDRAIL_DCL_SD_MAX", 2);
+const CI_MODE = process.env.CI === "true" || process.env.CI === "1";
+const PUPPETEER_EXECUTABLE_PATH = process.env.PUPPETEER_EXECUTABLE_PATH;
 
 console.log("=".repeat(60));
 console.log("  Refract vs React vs Preact — Load Time Benchmark");
@@ -249,7 +251,13 @@ for (const fw of frameworks) {
   servers.push(await serveDir(fw.dist, fw.port));
 }
 
-const browser = await puppeteer.launch({ headless: true });
+const launchOptions = {
+  headless: true,
+  ...(PUPPETEER_EXECUTABLE_PATH ? { executablePath: PUPPETEER_EXECUTABLE_PATH } : {}),
+  ...(CI_MODE ? { args: ["--no-sandbox", "--disable-setuid-sandbox"] } : {}),
+};
+
+const browser = await puppeteer.launch(launchOptions);
 const timings = {};
 for (const fw of frameworks) {
   timings[fw.label] = [];

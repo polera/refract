@@ -1,6 +1,6 @@
 import type { VNode, Fiber } from "./types.js";
 import { PLACEMENT, UPDATE, DELETION } from "./types.js";
-import { pushDeletion } from "./fiber.js";
+import { pushDeletion } from "./coreRenderer.js";
 
 function createDeletionScheduler(): (fiber: Fiber) => void {
   const scheduled = new Set<Fiber>();

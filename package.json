@@ -4,11 +4,22 @@
   "description": "A minimal React-like virtual DOM library focused on image rendering",
   "type": "module",
   "main": "src/refract/index.ts",
+  "exports": {
+    ".": "./src/refract/index.ts",
+    "./full": "./src/refract/full.ts",
+    "./core": "./src/refract/core.ts",
+    "./hooks": "./src/refract/features/hooks.ts",
+    "./context": "./src/refract/features/context.ts",
+    "./memo": "./src/refract/memo.ts",
+    "./security": "./src/refract/features/security.ts",
+    "./devtools": "./src/refract/devtools.ts"
+  },
   "scripts": {
     "dev": "vite demo",
     "build": "vite build",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bench:components": "vitest bench --run benchmark/components.bench.ts"
   },
   "license": "MIT",
   "devDependencies": {
