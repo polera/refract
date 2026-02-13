@@ -54,7 +54,7 @@ export function applyProps(
   newProps: Record<string, unknown>,
 ): void {
   for (const key of Object.keys(oldProps)) {
-    if (key === "children" || key === "key") continue;
+    if (key === "children" || key === "key" || key === "ref") continue;
     if (!(key in newProps)) {
       if (key.startsWith("on")) {
         el.removeEventListener(key.slice(2).toLowerCase(), oldProps[key] as EventListener);
@@ -65,7 +65,7 @@ export function applyProps(
   }
 
   for (const key of Object.keys(newProps)) {
-    if (key === "children" || key === "key") continue;
+    if (key === "children" || key === "key" || key === "ref") continue;
     if (oldProps[key] === newProps[key]) continue;
 
     if (key.startsWith("on")) {
@@ -85,6 +85,43 @@ export function applyProps(
       el.setAttribute(key, String(newProps[key]));
     }
   }
+}
+
+/** Shallow equality comparison for memo */
+export function shallowEqual(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const key of keysA) {
+    if (key === "children") continue;
+    if (!Object.is(a[key], b[key])) return false;
+  }
+  return true;
+}
+
+/** Memo wrapper type marker */
+const MEMO_MARKER = Symbol.for("refract.memo");
+
+interface MemoComponent {
+  (props: Props): VNode;
+  _inner: (props: Props) => VNode;
+  _compare: (a: Record<string, unknown>, b: Record<string, unknown>) => boolean;
+  _memo: typeof MEMO_MARKER;
+}
+
+export function memo(
+  component: (props: Props) => VNode,
+  compare?: (a: Record<string, unknown>, b: Record<string, unknown>) => boolean,
+): (props: Props) => VNode {
+  const memoComp: MemoComponent = ((props: Props) => component(props)) as MemoComponent;
+  memoComp._inner = component;
+  memoComp._compare = compare ?? shallowEqual;
+  memoComp._memo = MEMO_MARKER;
+  return memoComp;
+}
+
+function isMemo(type: unknown): type is MemoComponent {
+  return typeof type === "function" && (type as MemoComponent)._memo === MEMO_MARKER;
 }
 
 /** Render a VNode tree into a container (entry point) */
@@ -117,6 +154,23 @@ function performWork(fiber: Fiber): void {
   const isFragment = fiber.type === Fragment;
 
   if (isComponent) {
+    // Memo bailout: skip re-render if props haven't changed
+    if (isMemo(fiber.type) && fiber.alternate && fiber.flags === UPDATE) {
+      const memoComp = fiber.type as MemoComponent;
+      if (memoComp._compare(fiber.alternate.props, fiber.props)) {
+        // Reuse entire subtree
+        fiber.child = fiber.alternate.child;
+        fiber.hooks = fiber.alternate.hooks;
+        // Reparent children to new fiber
+        let c = fiber.child;
+        while (c) {
+          c.parent = fiber;
+          c = c.sibling;
+        }
+        return advanceWork(fiber);
+      }
+    }
+
     currentFiber = fiber;
     fiber._hookIndex = 0;
     if (!fiber.hooks) fiber.hooks = [];
@@ -140,6 +194,10 @@ function performWork(fiber: Fiber): void {
     return;
   }
 
+  advanceWork(fiber);
+}
+
+function advanceWork(fiber: Fiber): void {
   let next: Fiber | null = fiber;
   while (next) {
     if (next.sibling) {
@@ -215,14 +273,31 @@ function commitWork(fiber: Fiber): void {
     }
   }
 
+  // Handle ref prop
+  if (fiber.dom && fiber.props.ref) {
+    setRef(fiber.props.ref, fiber.dom);
+  }
+
   fiber.flags = 0;
 
   if (fiber.child) commitWork(fiber.child);
   if (fiber.sibling) commitWork(fiber.sibling);
 }
 
+function setRef(ref: unknown, value: Node | null): void {
+  if (typeof ref === "function") {
+    ref(value);
+  } else if (ref && typeof ref === "object" && "current" in ref) {
+    (ref as { current: unknown }).current = value;
+  }
+}
+
 function commitDeletion(fiber: Fiber): void {
   runCleanups(fiber);
+  // Clear ref on unmount
+  if (fiber.dom && fiber.props.ref) {
+    setRef(fiber.props.ref, null);
+  }
   if (fiber.dom) {
     fiber.dom.parentNode?.removeChild(fiber.dom);
   } else if (fiber.child) {

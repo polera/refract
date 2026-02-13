@@ -113,6 +113,10 @@ export function useReducer<S, A>(
   return [state, dispatch];
 }
 
+export function createRef<T = unknown>(): { current: T | null } {
+  return { current: null };
+}
+
 export function depsChanged(
   oldDeps: unknown[] | undefined,
   newDeps: unknown[] | undefined,
