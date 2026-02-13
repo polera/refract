@@ -5,6 +5,9 @@ implements the core ideas behind React -- a virtual DOM, createElement, render,
 and reconciliation -- in under 200 lines of TypeScript, producing a JavaScript
 bundle roughly 54x smaller than React.
 
+## LLM Disclosure
+I generated this using Claude Opus 4.6 as an experiment.
+
 ## Features
 
 - **createElement** -- builds virtual DOM nodes from tags, props, and children
