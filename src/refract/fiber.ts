@@ -68,7 +68,10 @@ export function applyProps(
     if (key === "children" || key === "key" || key === "ref") continue;
     if (oldProps[key] === newProps[key]) continue;
 
-    if (key.startsWith("on")) {
+    if (key === "dangerouslySetInnerHTML") {
+      const html = (newProps[key] as { __html: string }).__html;
+      el.innerHTML = html;
+    } else if (key.startsWith("on")) {
       const event = key.slice(2).toLowerCase();
       if (oldProps[key]) {
         el.removeEventListener(event, oldProps[key] as EventListener);
@@ -176,16 +179,22 @@ function performWork(fiber: Fiber): void {
     if (!fiber.hooks) fiber.hooks = [];
 
     const comp = fiber.type as (props: Props) => VNode;
-    const children = [comp(fiber.props)];
-    reconcileChildren(fiber, children);
+    try {
+      const children = [comp(fiber.props)];
+      reconcileChildren(fiber, children);
+    } catch (error) {
+      if (!handleError(fiber, error)) throw error;
+    }
   } else if (isFragment) {
-    // Fragments have no DOM — children attach to nearest parent DOM
     reconcileChildren(fiber, fiber.props.children ?? []);
   } else {
     if (!fiber.dom) {
       fiber.dom = createDom(fiber);
     }
-    reconcileChildren(fiber, fiber.props.children ?? []);
+    // Skip children when dangerouslySetInnerHTML is used
+    if (!fiber.props.dangerouslySetInnerHTML) {
+      reconcileChildren(fiber, fiber.props.children ?? []);
+    }
   }
 
   // Traverse: child first, then sibling, then uncle
@@ -341,6 +350,21 @@ function runEffects(fiber: Fiber): void {
   }
   if (fiber.child) runEffects(fiber.child);
   if (fiber.sibling) runEffects(fiber.sibling);
+}
+
+/** Walk up fiber tree to find an error handler. Returns true if handled. */
+function handleError(fiber: Fiber, error: unknown): boolean {
+  let f: Fiber | null = fiber.parent;
+  while (f) {
+    if (f._errorHandler) {
+      f._errorHandler(error);
+      // Render a null child for the errored component
+      reconcileChildren(fiber, []);
+      return true;
+    }
+    f = f.parent;
+  }
+  return false;
 }
 
 const pendingContainers = new Set<Node>();

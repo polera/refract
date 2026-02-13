@@ -42,6 +42,7 @@ export interface Fiber {
   hooks: Hook[] | null;
   _hookIndex?: number;
   _contexts?: Map<number, unknown>;
+  _errorHandler?: (error: unknown) => void;
   alternate: Fiber | null;
   flags: number;
 }

@@ -117,6 +117,17 @@ export function createRef<T = unknown>(): { current: T | null } {
   return { current: null };
 }
 
+export function useErrorBoundary(): [
+  unknown,
+  () => void,
+] {
+  const [error, setError] = useState<unknown>(null);
+  const fiber = currentFiber!;
+  fiber._errorHandler = (err: unknown) => setError(err);
+  const resetError = () => setError(null);
+  return [error, resetError];
+}
+
 export function depsChanged(
   oldDeps: unknown[] | undefined,
   newDeps: unknown[] | undefined,
