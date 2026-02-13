@@ -2,19 +2,26 @@
 
 A minimal React-like virtual DOM library focused on image rendering. Refract
 implements the core ideas behind React -- a virtual DOM, createElement, render,
-and reconciliation -- in under 200 lines of TypeScript, producing a JavaScript
-bundle roughly 54x smaller than React.
+reconciliation, hooks, context, and memo -- in TypeScript, producing a
+JavaScript bundle roughly 24x smaller than React.
 
 ## LLM Disclosure
 I generated this using Claude Opus 4.6 as an experiment.
 
 ## Features
 
-- **createElement** -- builds virtual DOM nodes from tags, props, and children
+- **createElement / JSX** -- builds virtual DOM nodes from tags, props, and children
+- **Fragments** -- group children without extra DOM nodes
 - **render** -- mounts a VNode tree into a real DOM container
-- **reconcile** -- diffs old and new VNode trees and patches the DOM in place
-- **Functional components** -- plain functions that accept props and return VNodes
-- **Scoped element types** -- supports `div`, `span`, and `img` tags
+- **Fiber-based reconciliation** -- keyed and positional diffing with minimal DOM patches
+- **Hooks** -- useState, useEffect, useRef, useMemo, useCallback, useReducer, useContext, useErrorBoundary
+- **Context API** -- createContext / Provider for dependency injection
+- **memo** -- skip re-renders when props are unchanged
+- **Refs** -- createRef and callback refs via the `ref` prop
+- **Error boundaries** -- catch and recover from render errors
+- **SVG support** -- automatic SVG namespace handling
+- **dangerouslySetInnerHTML** -- raw HTML injection
+- **Automatic batching** -- state updates are batched via microtask queue
 
 No JSX transform is required, but the library works with one. The tsconfig maps
 `jsxFactory` to `createElement` so JSX can be used if desired.
@@ -24,10 +31,13 @@ No JSX transform is required, but the library works with one. The tsconfig maps
 ```
 refract/
   src/refract/
-    types.ts          -- VNode, Props, Component type definitions
-    createElement.ts  -- VNode factory (handles components, children, text nodes)
-    render.ts         -- initial mount + prop application
-    reconcile.ts      -- diffing and minimal DOM patching
+    types.ts          -- VNode, Fiber, Props, Hook type definitions
+    createElement.ts  -- VNode factory + Fragment symbol
+    fiber.ts          -- fiber-based renderer, commit, memo, effects
+    reconcile.ts      -- keyed + positional child diffing
+    hooks.ts          -- useState, useEffect, useRef, useMemo, useCallback, useReducer, useErrorBoundary
+    context.ts        -- createContext + useContext
+    render.ts         -- public render() entry point
     index.ts          -- public API barrel export
   demo/               -- image gallery demo app
   tests/              -- Vitest unit tests
@@ -87,22 +97,23 @@ Called automatically by `render` on re-renders.
 ## How It Works
 
 1. `createElement` normalizes children (flattening arrays, converting strings
-   and numbers to text VNodes, filtering out nulls and booleans) and invokes
-   functional components immediately.
+   and numbers to text VNodes, filtering out nulls and booleans). Component
+   functions are stored as VNode types and called later during reconciliation.
 
-2. `render` walks the VNode tree and creates real DOM nodes. Props are applied
-   as attributes, with special handling for `className`, `style` objects, and
-   `on*` event listeners. The current VNode tree is stored on the container
-   element for later diffing.
+2. `render` builds a fiber tree from the VNode tree. Each fiber holds a
+   reference to its DOM node, hooks, and alternate (previous render). Props are
+   applied as attributes, with special handling for `className`, `style`
+   objects, `ref`, and `on*` event listeners.
 
-3. `reconcile` compares old and new VNode trees node-by-node:
-   - If the node type changed, the entire subtree is replaced.
-   - If a text node changed, only `textContent` is updated.
-   - Otherwise, props are diffed and children are reconciled recursively.
-   - Extra old children are removed; extra new children are appended.
+3. Reconciliation diffs old and new children using keyed matching (when keys
+   are present) or positional matching. Fibers are flagged for placement,
+   update, or deletion. After the work phase, a commit phase applies all DOM
+   mutations in a single pass, followed by an effects phase that runs
+   useEffect callbacks.
 
-There is no keyed diffing, fiber architecture, or scheduling. This keeps the
-implementation small and easy to follow.
+4. State updates from hooks are batched via `queueMicrotask` -- multiple
+   `setState` calls within the same synchronous block result in a single
+   re-render.
 
 ## Benchmark
 
@@ -116,25 +127,26 @@ the browser cache disabled and external image requests blocked.
 
 | Metric           | Refract   | React      | Preact    |
 |------------------|-----------|------------|-----------|
-| JS bundle (raw)  | 3.49 kB   | 189.74 kB  | 14.46 kB  |
-| JS bundle (gzip) | 1.45 kB   | 59.52 kB   | 5.95 kB   |
-| All assets (raw) | 4.76 kB   | 191.01 kB  | 15.74 kB  |
+| JS bundle (raw)  | 7.77 kB   | 189.74 kB  | 14.46 kB  |
+| JS bundle (gzip) | 3.01 kB   | 59.52 kB   | 5.95 kB   |
+| All assets (raw) | 9.04 kB   | 191.01 kB  | 15.74 kB  |
 
 ### Load Time (median of 15 runs)
 
-| Metric           | Refract  | React    | Preact   |
-|------------------|----------|----------|----------|
-| DOM Interactive   | 6.90 ms  | 6.80 ms  | 6.70 ms  |
-| DOMContentLoaded  | 10.90 ms | 18.60 ms | 10.80 ms |
-| App Render (rAF)  | 0.10 ms  | 0.10 ms  | <0.1 ms  |
+| Metric           | Refract   | React     | Preact    |
+|------------------|-----------|-----------|-----------|
+| DOM Interactive   | 6.90 ms   | 6.90 ms   | 6.90 ms   |
+| DOMContentLoaded  | 11.90 ms  | 19.70 ms  | 12.10 ms  |
+| App Render (rAF)  | <0.1 ms   | <0.1 ms   | <0.1 ms   |
 
-Refract's production JS bundle is over 54x smaller than React's and 4x smaller
-than Preact's before compression. After gzip, Refract is 41x smaller than React
-and 4x smaller than Preact. The DOMContentLoaded time -- which reflects the
-cost of downloading, parsing, and executing JavaScript -- is roughly 1.7x
-faster with Refract compared to React and on par with Preact. Actual app render
-time (measured via requestAnimationFrame after the framework populates the DOM)
-is negligible for all three frameworks at this scale.
+Refract's production JS bundle is ~24x smaller than React's and ~1.9x smaller
+than Preact's before compression. After gzip, Refract is ~20x smaller than
+React and ~2x smaller than Preact. Despite now including hooks, context, memo,
+keyed reconciliation, fragments, error boundaries, and a fiber architecture,
+the bundle remains well under 8 kB uncompressed. The DOMContentLoaded time --
+which reflects the cost of downloading, parsing, and executing JavaScript -- is
+roughly 1.7x faster with Refract compared to React and on par with Preact.
+Actual app render time is negligible for all three frameworks at this scale.
 
 ### Running the Benchmark
 
@@ -164,46 +176,51 @@ How Refract compares to React and Preact:
 | Virtual DOM                    | Yes     | Yes   | Yes    |
 | createElement                  | Yes     | Yes   | Yes    |
 | Reconciliation / diffing       | Yes     | Yes   | Yes    |
-| Keyed reconciliation           | No      | Yes   | Yes    |
-| Fragments                      | No      | Yes   | Yes    |
+| Keyed reconciliation           | Yes     | Yes   | Yes    |
+| Fragments                      | Yes     | Yes   | Yes    |
 | JSX support                    | Yes     | Yes   | Yes    |
+| SVG support                    | Yes     | Yes   | Yes    |
 | **Components**                 |         |       |        |
 | Functional components          | Yes     | Yes   | Yes    |
 | Class components               | No      | Yes   | Yes    |
 | **Hooks**                      |         |       |        |
-| useState                       | No      | Yes   | Yes    |
-| useEffect / useLayoutEffect    | No      | Yes   | Yes    |
-| useRef                         | No      | Yes   | Yes    |
-| useMemo / useCallback          | No      | Yes   | Yes    |
-| useReducer                     | No      | Yes   | Yes    |
-| useContext                      | No      | Yes   | Yes    |
+| useState                       | Yes     | Yes   | Yes    |
+| useEffect                      | Yes     | Yes   | Yes    |
+| useLayoutEffect                | No      | Yes   | Yes    |
+| useRef                         | Yes     | Yes   | Yes    |
+| useMemo / useCallback          | Yes     | Yes   | Yes    |
+| useReducer                     | Yes     | Yes   | Yes    |
+| useContext                     | Yes     | Yes   | Yes    |
 | useId                          | No      | Yes   | Yes    |
 | useTransition / useDeferredValue | No    | Yes   | No     |
 | **State & Data Flow**          |         |       |        |
-| Built-in state management      | No      | Yes   | Yes    |
-| Context API                    | No      | Yes   | Yes    |
-| Refs (createRef / forwardRef)  | No      | Yes   | Yes    |
+| Built-in state management      | Yes     | Yes   | Yes    |
+| Context API                    | Yes     | Yes   | Yes    |
+| Refs (createRef / ref prop)    | Yes     | Yes   | Yes    |
+| forwardRef                     | No      | Yes   | Yes    |
 | **Rendering**                  |         |       |        |
 | Event handling                 | Yes     | Yes   | Yes    |
 | Style objects                  | Yes     | Yes   | Yes    |
 | className prop                 | Yes     | Yes   | Yes¹   |
+| dangerouslySetInnerHTML        | Yes     | Yes   | Yes    |
 | Portals                        | No      | Yes   | Yes    |
 | Suspense / lazy                | No      | Yes   | Yes²   |
-| Error boundaries               | No      | Yes   | Yes    |
+| Error boundaries               | Yes³    | Yes   | Yes    |
 | Server-side rendering          | No      | Yes   | Yes    |
 | Hydration                      | No      | Yes   | Yes    |
 | **Performance**                |         |       |        |
-| Fiber architecture             | No      | Yes   | No     |
+| Fiber architecture             | Yes     | Yes   | No     |
 | Concurrent rendering           | No      | Yes   | No     |
-| Automatic batching             | No      | Yes   | Yes    |
-| memo / PureComponent           | No      | Yes   | Yes    |
+| Automatic batching             | Yes     | Yes   | Yes    |
+| memo / PureComponent           | Yes     | Yes   | Yes    |
 | **Ecosystem**                  |         |       |        |
 | DevTools                       | No      | Yes   | Yes    |
 | React compatibility layer      | N/A     | N/A   | Yes    |
-| **Bundle Size (gzip)**         | ~1.5 kB | ~60 kB | ~6 kB |
+| **Bundle Size (gzip)**         | ~3 kB   | ~60 kB | ~6 kB |
 
 ¹ Preact supports both `class` and `className`.
 ² Preact has partial Suspense support via `preact/compat`.
+³ Refract uses the `useErrorBoundary` hook rather than class-based error boundaries.
 
 ## License
 
