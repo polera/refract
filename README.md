@@ -3,10 +3,10 @@
 A minimal React-like virtual DOM library focused on image rendering. Refract
 implements the core ideas behind React -- a virtual DOM, createElement, render,
 reconciliation, hooks, context, and memo -- in TypeScript, producing a
-JavaScript bundle roughly 24x smaller than React.
+JavaScript bundle roughly 21x smaller than React.
 
 ## LLM Disclosure
-I generated this using Claude Opus 4.6 as an experiment.
+I generated this using Claude Opus 4.6 and gpt-5.3-codex as an experiment.
 
 ## Features
 
@@ -20,7 +20,7 @@ I generated this using Claude Opus 4.6 as an experiment.
 - **Refs** -- createRef and callback refs via the `ref` prop
 - **Error boundaries** -- catch and recover from render errors
 - **SVG support** -- automatic SVG namespace handling
-- **dangerouslySetInnerHTML** -- raw HTML injection
+- **dangerouslySetInnerHTML** -- raw HTML injection with a default sanitizer and configurable `setHtmlSanitizer` override
 - **Automatic batching** -- state updates are batched via microtask queue
 
 No JSX transform is required, but the library works with one. The tsconfig maps
@@ -122,31 +122,33 @@ identical image gallery app (6 cards with images, captions, and a shuffle
 button). All three apps are built with Vite and served as static production
 bundles. Measurements are taken with Puppeteer over 15 runs per framework with
 the browser cache disabled and external image requests blocked.
+The results below are from a local run on February 13, 2026.
 
 ### Bundle Size
 
 | Metric           | Refract   | React      | Preact    |
 |------------------|-----------|------------|-----------|
-| JS bundle (raw)  | 7.77 kB   | 189.74 kB  | 14.46 kB  |
-| JS bundle (gzip) | 3.01 kB   | 59.52 kB   | 5.95 kB   |
-| All assets (raw) | 9.04 kB   | 191.01 kB  | 15.74 kB  |
+| JS bundle (raw)  | 8.92 kB   | 189.74 kB  | 14.46 kB  |
+| JS bundle (gzip) | 3.42 kB   | 59.52 kB   | 5.95 kB   |
+| All assets (raw) | 10.19 kB  | 191.01 kB  | 15.74 kB  |
 
 ### Load Time (median of 15 runs)
 
 | Metric           | Refract   | React     | Preact    |
 |------------------|-----------|-----------|-----------|
-| DOM Interactive   | 6.90 ms   | 6.90 ms   | 6.90 ms   |
-| DOMContentLoaded  | 11.90 ms  | 19.70 ms  | 12.10 ms  |
+| DOM Interactive   | 6.90 ms   | 6.60 ms   | 6.40 ms   |
+| DOMContentLoaded  | 11.00 ms  | 18.40 ms  | 10.60 ms  |
 | App Render (rAF)  | <0.1 ms   | <0.1 ms   | <0.1 ms   |
 
-Refract's production JS bundle is ~24x smaller than React's and ~1.9x smaller
-than Preact's before compression. After gzip, Refract is ~20x smaller than
-React and ~2x smaller than Preact. Despite now including hooks, context, memo,
-keyed reconciliation, fragments, error boundaries, and a fiber architecture,
-the bundle remains well under 8 kB uncompressed. The DOMContentLoaded time --
+Refract's production JS bundle is ~21.3x smaller than React's and ~1.6x smaller
+than Preact's before compression. After gzip, Refract is ~17.4x smaller than
+React and ~1.7x smaller than Preact. Despite now including hooks, context, memo,
+keyed reconciliation, fragments, error boundaries, a default HTML sanitizer, and
+a fiber architecture, the bundle remains under 9 kB uncompressed. The DOMContentLoaded time --
 which reflects the cost of downloading, parsing, and executing JavaScript -- is
-roughly 1.7x faster with Refract compared to React and on par with Preact.
-Actual app render time is negligible for all three frameworks at this scale.
+roughly 1.7x faster with Refract compared to React and close to Preact in this
+run (11.0 ms vs 10.6 ms). Actual app render time is negligible for all three
+frameworks at this scale.
 
 ### Running the Benchmark
 
@@ -208,6 +210,9 @@ How Refract compares to React and Preact:
 | Error boundaries               | Yes³    | Yes   | Yes    |
 | Server-side rendering          | No      | Yes   | Yes    |
 | Hydration                      | No      | Yes   | Yes    |
+| **Security**                   |         |       |        |
+| Default HTML sanitizer for `dangerouslySetInnerHTML` | Yes | No | No |
+| Configurable HTML sanitizer hook (`setHtmlSanitizer`) | Yes | No | No |
 | **Performance**                |         |       |        |
 | Fiber architecture             | Yes     | Yes   | No     |
 | Concurrent rendering           | No      | Yes   | No     |
@@ -216,7 +221,7 @@ How Refract compares to React and Preact:
 | **Ecosystem**                  |         |       |        |
 | DevTools                       | No      | Yes   | Yes    |
 | React compatibility layer      | N/A     | N/A   | Yes    |
-| **Bundle Size (gzip)**         | ~3 kB   | ~60 kB | ~6 kB |
+| **Bundle Size (gzip)**         | ~3.4 kB | ~59.5 kB | ~6.0 kB |
 
 ¹ Preact supports both `class` and `className`.
 ² Preact has partial Suspense support via `preact/compat`.

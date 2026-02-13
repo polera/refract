@@ -32,6 +32,38 @@ describe("dangerouslySetInnerHTML", () => {
     expect(div.querySelector("b")).not.toBeNull();
     expect(div.querySelector("b")!.textContent).toBe("bold");
   });
+
+  it("sanitizes dangerous tags and attributes", () => {
+    function App() {
+      return createElement("div", {
+        dangerouslySetInnerHTML: {
+          __html: `
+            <img src="x" onerror="alert('xss')" />
+            <a href="javascript:alert('xss')">click</a>
+            <script>alert('xss')</script>
+            <b>safe</b>
+          `,
+        },
+      });
+    }
+    render(createElement(App, null), container);
+    const div = container.querySelector("div")!;
+    expect(div.querySelector("script")).toBeNull();
+    expect(div.querySelector("img")!.getAttribute("onerror")).toBeNull();
+    expect(div.querySelector("a")!.getAttribute("href")).toBeNull();
+    expect(div.querySelector("b")!.textContent).toBe("safe");
+  });
+
+  it("throws when __html is not a string", () => {
+    function App() {
+      return createElement("div", {
+        dangerouslySetInnerHTML: { __html: 123 as unknown as string },
+      });
+    }
+    expect(() => render(createElement(App, null), container)).toThrow(
+      "dangerouslySetInnerHTML expects a string __html value",
+    );
+  });
 });
 
 describe("useErrorBoundary", () => {

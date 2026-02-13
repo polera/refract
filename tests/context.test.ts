@@ -70,4 +70,21 @@ describe("context", () => {
     render(createElement(App, null), container);
     expect(container.querySelector("span")!.textContent).toBe("dark-fr");
   });
+
+  it("does not add an extra DOM wrapper for provider children", () => {
+    const ThemeCtx = createContext("light");
+    function App() {
+      return createElement("div", null,
+        createElement(ThemeCtx.Provider, { value: "dark" },
+          createElement("span", null, "one"),
+          createElement("span", null, "two"),
+        ),
+      );
+    }
+    render(createElement(App, null), container);
+    const div = container.querySelector("div")!;
+    expect(div.children).toHaveLength(2);
+    expect(div.children[0].textContent).toBe("one");
+    expect(div.children[1].textContent).toBe("two");
+  });
 });

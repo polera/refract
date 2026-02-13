@@ -67,4 +67,16 @@ describe("render", () => {
     div.click();
     expect(clicked).toBe(true);
   });
+
+  it("blocks javascript: URLs on URL attributes", () => {
+    render(createElement("a", { href: "javascript:alert('xss')" }, "link"), container);
+    const link = container.querySelector("a")!;
+    expect(link.getAttribute("href")).toBeNull();
+  });
+
+  it("allows safe URLs on URL attributes", () => {
+    render(createElement("a", { href: "https://example.com" }, "link"), container);
+    const link = container.querySelector("a")!;
+    expect(link.getAttribute("href")).toBe("https://example.com");
+  });
 });

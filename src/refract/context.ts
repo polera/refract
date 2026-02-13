@@ -1,6 +1,6 @@
 import type { VNode, Props } from "./types.js";
 import { currentFiber } from "./fiber.js";
-import { createElement } from "./createElement.js";
+import { createElement, Fragment } from "./createElement.js";
 
 let contextId = 0;
 
@@ -20,7 +20,7 @@ export function createContext<T>(defaultValue: T): Context<T> {
     fiber._contexts.set(id, props.value);
 
     const children = props.children ?? [];
-    return children.length === 1 ? children[0] : createElement("div", null, ...children);
+    return children.length === 1 ? children[0] : createElement(Fragment, null, ...children);
   };
 
   return { Provider, _id: id, _defaultValue: defaultValue };

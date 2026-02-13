@@ -1,6 +1,6 @@
 import { createServer } from "http";
 import { readFileSync, statSync, readdirSync } from "fs";
-import { join, extname } from "path";
+import { join, extname, resolve, sep } from "path";
 import { fileURLToPath } from "url";
 import { gzipSync } from "zlib";
 import puppeteer from "puppeteer";
@@ -38,9 +38,27 @@ const MIME = {
 };
 
 function serveDir(dir, port) {
-  return new Promise((resolve) => {
+  const baseDir = resolve(dir);
+  return new Promise((resolveServer) => {
     const server = createServer((req, res) => {
-      let filePath = join(dir, req.url === "/" ? "index.html" : req.url);
+      const requestUrl = new URL(req.url ?? "/", "http://127.0.0.1");
+      let pathname = requestUrl.pathname === "/" ? "/index.html" : requestUrl.pathname;
+
+      try {
+        pathname = decodeURIComponent(pathname);
+      } catch {
+        res.writeHead(400);
+        res.end("Bad request");
+        return;
+      }
+
+      const filePath = resolve(baseDir, `.${pathname}`);
+      if (filePath !== baseDir && !filePath.startsWith(baseDir + sep)) {
+        res.writeHead(403);
+        res.end("Forbidden");
+        return;
+      }
+
       try {
         const content = readFileSync(filePath);
         const ext = extname(filePath);
@@ -51,7 +69,7 @@ function serveDir(dir, port) {
         res.end("Not found");
       }
     });
-    server.listen(port, () => resolve(server));
+    server.listen(port, "127.0.0.1", () => resolveServer(server));
   });
 }
 

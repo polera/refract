@@ -86,4 +86,21 @@ describe("reconcile", () => {
 
     expect(imgBefore).toBe(imgAfter);
   });
+
+  it("removes old style properties that are no longer present", () => {
+    render(
+      createElement("div", { style: { color: "red", backgroundColor: "black" } }),
+      container,
+    );
+    const div = container.querySelector("div")!;
+    expect(div.style.color).toBe("red");
+    expect(div.style.backgroundColor).toBe("black");
+
+    render(
+      createElement("div", { style: { color: "blue" } }),
+      container,
+    );
+    expect(div.style.color).toBe("blue");
+    expect(div.style.backgroundColor).toBe("");
+  });
 });

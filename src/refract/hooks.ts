@@ -1,5 +1,5 @@
 import type { Hook } from "./types.js";
-import { currentFiber, scheduleRender } from "./fiber.js";
+import { currentFiber, scheduleRender, markPendingEffects } from "./fiber.js";
 
 function getHook(): Hook {
   const fiber = currentFiber!;
@@ -54,14 +54,17 @@ interface EffectHook extends Hook {
 
 export function useEffect(effect: () => EffectCleanup, deps?: unknown[]): void {
   const hook = getHook() as EffectHook;
+  const fiber = currentFiber!;
 
   if (hook.state === undefined) {
     hook.state = { effect, deps, cleanup: undefined, pending: true };
+    markPendingEffects(fiber);
   } else {
     if (depsChanged(hook.state.deps, deps)) {
       hook.state.effect = effect;
       hook.state.deps = deps;
       hook.state.pending = true;
+      markPendingEffects(fiber);
     } else {
       hook.state.pending = false;
     }

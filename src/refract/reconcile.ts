@@ -2,6 +2,16 @@ import type { VNode, Fiber } from "./types.js";
 import { PLACEMENT, UPDATE, DELETION } from "./types.js";
 import { pushDeletion } from "./fiber.js";
 
+function createDeletionScheduler(): (fiber: Fiber) => void {
+  const scheduled = new Set<Fiber>();
+  return (fiber: Fiber) => {
+    if (scheduled.has(fiber)) return;
+    scheduled.add(fiber);
+    fiber.flags = DELETION;
+    pushDeletion(fiber);
+  };
+}
+
 function createFiber(
   child: VNode,
   parentFiber: Fiber,
@@ -64,6 +74,7 @@ function reconcilePositional(
   children: VNode[],
   oldChildren: Fiber[],
 ): void {
+  const scheduleDeletion = createDeletionScheduler();
   let prevSibling: Fiber | null = null;
   const maxLen = Math.max(children.length, oldChildren.length);
 
@@ -78,8 +89,7 @@ function reconcilePositional(
     }
 
     if (oldFiber && (!child || oldFiber.type !== child.type)) {
-      oldFiber.flags = DELETION;
-      pushDeletion(oldFiber);
+      scheduleDeletion(oldFiber);
     }
 
     if (i === 0) {
@@ -97,10 +107,13 @@ function reconcileKeyed(
   children: VNode[],
   oldChildren: Fiber[],
 ): void {
+  const scheduleDeletion = createDeletionScheduler();
   // Build map of keyed old fibers
   const keyMap = new Map<string | number, Fiber>();
   const unkeyedOld: Fiber[] = [];
+  const oldIndexMap = new Map<Fiber, number>();
   for (const f of oldChildren) {
+    oldIndexMap.set(f, oldIndexMap.size);
     if (f.key != null) {
       keyMap.set(f.key, f);
     } else {
@@ -128,8 +141,7 @@ function reconcileKeyed(
           oldFiber = candidate;
           break;
         } else {
-          candidate.flags = DELETION;
-          pushDeletion(candidate);
+          scheduleDeletion(candidate);
         }
       }
     }
@@ -139,7 +151,7 @@ function reconcileKeyed(
     if (oldFiber) {
       usedOld.add(oldFiber);
       // Check if we need to move
-      const oldIndex = oldChildren.indexOf(oldFiber);
+      const oldIndex = oldIndexMap.get(oldFiber)!;
       if (oldIndex < lastPlacedIndex) {
         newFiber.flags = PLACEMENT;
       } else {
@@ -159,8 +171,7 @@ function reconcileKeyed(
   // Delete remaining old fibers that weren't matched
   for (const f of oldChildren) {
     if (!usedOld.has(f)) {
-      f.flags = DELETION;
-      pushDeletion(f);
+      scheduleDeletion(f);
     }
   }
 
@@ -168,8 +179,7 @@ function reconcileKeyed(
   while (unkeyedIndex < unkeyedOld.length) {
     const f = unkeyedOld[unkeyedIndex++];
     if (!usedOld.has(f)) {
-      f.flags = DELETION;
-      pushDeletion(f);
+      scheduleDeletion(f);
     }
   }
 }

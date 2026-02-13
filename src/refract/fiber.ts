@@ -9,6 +9,7 @@ export let currentFiber: Fiber | null = null;
 /** Store root fiber per container */
 const roots = new WeakMap<Node, Fiber>();
 let deletions: Fiber[] = [];
+const fibersWithPendingEffects = new Set<Fiber>();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const SVG_TAGS = new Set([
@@ -17,9 +18,65 @@ const SVG_TAGS = new Set([
   "mask", "pattern", "marker", "linearGradient", "radialGradient", "stop",
   "foreignObject", "symbol", "desc", "title",
 ]);
+const URL_ATTRS = new Set(["href", "src", "action", "formaction", "xlink:href"]);
+const BLOCKED_HTML_TAGS = new Set(["script", "iframe", "object", "embed", "link", "meta", "base"]);
+
+export type HtmlSanitizer = (html: string) => string;
+
+let htmlSanitizer: HtmlSanitizer = defaultHtmlSanitizer;
+
+export function setHtmlSanitizer(sanitizer: HtmlSanitizer | null): void {
+  htmlSanitizer = sanitizer ?? defaultHtmlSanitizer;
+}
+
+function normalizedUrl(value: string): string {
+  return value.replace(/[\u0000-\u0020\u007f]+/g, "").toLowerCase();
+}
+
+function isUnsafeUrl(value: string): boolean {
+  const normalized = normalizedUrl(value);
+  return normalized.startsWith("javascript:") || normalized.startsWith("vbscript:");
+}
+
+function isUnsafeUrlProp(key: string, value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  return URL_ATTRS.has(key.toLowerCase()) && isUnsafeUrl(value);
+}
+
+function defaultHtmlSanitizer(html: string): string {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+
+  const elements = template.content.querySelectorAll("*");
+  for (const element of elements) {
+    const tagName = element.tagName.toLowerCase();
+    if (BLOCKED_HTML_TAGS.has(tagName)) {
+      element.remove();
+      continue;
+    }
+
+    for (const attr of Array.from(element.attributes)) {
+      const attrName = attr.name.toLowerCase();
+      if (attrName.startsWith("on")) {
+        element.removeAttribute(attr.name);
+        continue;
+      }
+
+      if (URL_ATTRS.has(attrName) && isUnsafeUrl(attr.value)) {
+        element.removeAttribute(attr.name);
+      }
+    }
+  }
+
+  return template.innerHTML;
+}
 
 export function pushDeletion(fiber: Fiber): void {
   deletions.push(fiber);
+}
+
+export function markPendingEffects(fiber: Fiber): void {
+  fibersWithPendingEffects.add(fiber);
 }
 
 /** Create a real DOM node from a fiber */
@@ -69,8 +126,11 @@ export function applyProps(
     if (oldProps[key] === newProps[key]) continue;
 
     if (key === "dangerouslySetInnerHTML") {
-      const html = (newProps[key] as { __html: string }).__html;
-      el.innerHTML = html;
+      const raw = (newProps[key] as { __html?: unknown } | undefined)?.__html;
+      if (typeof raw !== "string") {
+        throw new TypeError("dangerouslySetInnerHTML expects a string __html value");
+      }
+      el.innerHTML = htmlSanitizer(raw);
     } else if (key.startsWith("on")) {
       const event = key.slice(2).toLowerCase();
       if (oldProps[key]) {
@@ -79,12 +139,28 @@ export function applyProps(
       el.addEventListener(event, newProps[key] as EventListener);
     } else if (key === "className") {
       el.setAttribute("class", newProps[key] as string);
-    } else if (key === "style" && typeof newProps[key] === "object") {
-      const styles = newProps[key] as Record<string, string>;
-      for (const [prop, val] of Object.entries(styles)) {
-        (el.style as unknown as Record<string, string>)[prop] = val;
+    } else if (key === "style") {
+      if (typeof newProps[key] === "object" && newProps[key] !== null) {
+        const prevStyles = (typeof oldProps[key] === "object" && oldProps[key] !== null)
+          ? oldProps[key] as Record<string, unknown>
+          : {};
+        const styles = newProps[key] as Record<string, unknown>;
+        for (const prop of Object.keys(prevStyles)) {
+          if (!(prop in styles)) {
+            (el.style as unknown as Record<string, string>)[prop] = "";
+          }
+        }
+        for (const [prop, val] of Object.entries(styles)) {
+          (el.style as unknown as Record<string, string>)[prop] = val == null ? "" : String(val);
+        }
+      } else {
+        el.removeAttribute("style");
       }
     } else {
+      if (isUnsafeUrlProp(key, newProps[key])) {
+        el.removeAttribute(key);
+        continue;
+      }
       el.setAttribute(key, String(newProps[key]));
     }
   }
@@ -147,7 +223,7 @@ export function renderFiber(vnode: VNode, container: Node): void {
   deletions = [];
   performWork(rootFiber);
   commitRoot(rootFiber);
-  runEffects(rootFiber);
+  runEffects();
   roots.set(container, rootFiber);
 }
 
@@ -320,6 +396,7 @@ function commitDeletion(fiber: Fiber): void {
 }
 
 function runCleanups(fiber: Fiber): void {
+  fibersWithPendingEffects.delete(fiber);
   if (fiber.hooks) {
     for (const hook of fiber.hooks) {
       const s = hook.state as { cleanup?: () => void } | undefined;
@@ -333,8 +410,9 @@ function runCleanups(fiber: Fiber): void {
   if (fiber.sibling) runCleanups(fiber.sibling);
 }
 
-function runEffects(fiber: Fiber): void {
-  if (fiber.hooks) {
+function runEffects(): void {
+  for (const fiber of fibersWithPendingEffects) {
+    if (!fiber.hooks) continue;
     for (const hook of fiber.hooks) {
       const s = hook.state as {
         effect?: () => void | (() => void);
@@ -348,8 +426,7 @@ function runEffects(fiber: Fiber): void {
       }
     }
   }
-  if (fiber.child) runEffects(fiber.child);
-  if (fiber.sibling) runEffects(fiber.sibling);
+  fibersWithPendingEffects.clear();
 }
 
 /** Walk up fiber tree to find an error handler. Returns true if handled. */
@@ -405,7 +482,7 @@ function flushRenders(): void {
     deletions = [];
     performWork(newRoot);
     commitRoot(newRoot);
-    runEffects(newRoot);
+    runEffects();
     roots.set(container, newRoot);
   }
   pendingContainers.clear();

@@ -1,8 +1,8 @@
 /** A functional component */
 export type Component = (props: Props) => VNode;
 
-/** The `type` field of a VNode — any HTML tag string or a component function */
-export type VNodeType = string | Component;
+/** The `type` field of a VNode — any HTML tag string, fragment symbol, or component */
+export type VNodeType = string | symbol | Component;
 
 /** Props passed to elements and components */
 export interface Props {
