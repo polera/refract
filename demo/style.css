@@ -9,14 +9,31 @@ body {
   background: #111;
   color: #eee;
   min-height: 100vh;
-  display: flex;
-  justify-content: center;
   padding: 2rem;
 }
 
+.layout {
+  max-width: 1320px;
+  margin: 0 auto;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  align-items: start;
+}
+
+#app {
+  min-width: 0;
+}
+
+#inspector-root {
+  position: sticky;
+  top: 1rem;
+}
+
 .app {
-  max-width: 900px;
+  max-width: 960px;
   width: 100%;
+  margin: 0 auto;
 }
 
 .title {
@@ -75,4 +92,107 @@ body {
 
 .btn:hover {
   background: #555;
+}
+
+.inspector {
+  background: #171717;
+  border: 1px solid #2b2b2b;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.inspector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid #2c2c2c;
+  background: #1e1e1e;
+}
+
+.inspector-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.inspector-renderer {
+  font-size: 0.75rem;
+  color: #9aa0a6;
+}
+
+.inspector-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid #2c2c2c;
+  font-size: 0.72rem;
+}
+
+.inspector-stats div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: #b6bcc4;
+}
+
+.inspector-stats strong {
+  color: #f0f4f8;
+}
+
+.inspector-tree {
+  max-height: min(68vh, 620px);
+  overflow: auto;
+  padding: 0.6rem 0.8rem 0.85rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.73rem;
+  line-height: 1.45;
+}
+
+.inspector-empty {
+  color: #8e949d;
+  font-style: italic;
+}
+
+.inspector-list {
+  list-style: none;
+  margin: 0;
+  padding-left: 0.85rem;
+  border-left: 1px solid #2d2d2d;
+}
+
+.inspector-item {
+  margin-top: 0.35rem;
+}
+
+.inspector-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.inspector-node-type {
+  color: #72d6ff;
+  font-weight: 700;
+}
+
+.inspector-meta {
+  color: #b5bdc8;
+}
+
+@media (max-width: 1050px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  #inspector-root {
+    position: static;
+  }
+
+  .inspector-tree {
+    max-height: 380px;
+  }
 }

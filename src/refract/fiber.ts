@@ -2,6 +2,7 @@ import type { VNode, Fiber, Props, Hook } from "./types.js";
 import { PLACEMENT, UPDATE, DELETION } from "./types.js";
 import { reconcileChildren } from "./reconcile.js";
 import { Fragment } from "./createElement.js";
+import { reportDevtoolsCommit } from "./devtools.js";
 
 /** Module globals for hook system */
 export let currentFiber: Fiber | null = null;
@@ -222,9 +223,11 @@ export function renderFiber(vnode: VNode, container: Node): void {
   };
   deletions = [];
   performWork(rootFiber);
+  const committedDeletions = deletions.slice();
   commitRoot(rootFiber);
   runEffects();
   roots.set(container, rootFiber);
+  reportDevtoolsCommit(rootFiber, committedDeletions);
 }
 
 /** Depth-first work loop: call components, diff children */
@@ -481,9 +484,11 @@ function flushRenders(): void {
     };
     deletions = [];
     performWork(newRoot);
+    const committedDeletions = deletions.slice();
     commitRoot(newRoot);
     runEffects();
     roots.set(container, newRoot);
+    reportDevtoolsCommit(newRoot, committedDeletions);
   }
   pendingContainers.clear();
 }

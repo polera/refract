@@ -1,5 +1,6 @@
-import { createElement, render, useState, Fragment } from "../src/refract/index.js";
+import { createElement, render, useState } from "../src/refract/index.js";
 import type { Props } from "../src/refract/types.js";
+import { mountInspector } from "./inspector.js";
 
 const images = [
   { src: "https://picsum.photos/seed/refract1/400/300", alt: "Mountain landscape", caption: "Mountains" },
@@ -50,4 +51,13 @@ function App() {
   );
 }
 
+function shouldMountInspector(): boolean {
+  if (typeof window === "undefined") return false;
+  const value = new URLSearchParams(window.location.search).get("inspector");
+  return value !== "0" && value !== "false";
+}
+
+if (shouldMountInspector()) {
+  mountInspector(document.getElementById("inspector-root"));
+}
 render(createElement(App, null), document.getElementById("app")!);

@@ -22,6 +22,7 @@ I generated this using Claude Opus 4.6 and gpt-5.3-codex as an experiment.
 - **SVG support** -- automatic SVG namespace handling
 - **dangerouslySetInnerHTML** -- raw HTML injection with a default sanitizer and configurable `setHtmlSanitizer` override
 - **Automatic batching** -- state updates are batched via microtask queue
+- **DevTools hook support** -- emits commit/unmount snapshots to a global hook or explicit hook instance
 
 No JSX transform is required, but the library works with one. The tsconfig maps
 `jsxFactory` to `createElement` so JSX can be used if desired.
@@ -34,6 +35,7 @@ refract/
     types.ts          -- VNode, Fiber, Props, Hook type definitions
     createElement.ts  -- VNode factory + Fragment symbol
     fiber.ts          -- fiber-based renderer, commit, memo, effects
+    devtools.ts       -- optional devtools bridge + snapshot serialization
     reconcile.ts      -- keyed + positional child diffing
     hooks.ts          -- useState, useEffect, useRef, useMemo, useCallback, useReducer, useErrorBoundary
     context.ts        -- createContext + useContext
@@ -94,6 +96,29 @@ render(vnode, document.getElementById("app")!);
 Low-level function that diffs two VNode trees and applies minimal DOM mutations.
 Called automatically by `render` on re-renders.
 
+### DevTools hook integration
+
+Refract emits commit and unmount events when a hook is present at
+`window.__REFRACT_DEVTOOLS_GLOBAL_HOOK__` (or `globalThis` in non-browser
+environments). You can also set the hook directly with `setDevtoolsHook`.
+
+```ts
+import { setDevtoolsHook } from "refract";
+
+setDevtoolsHook({
+  inject(renderer) {
+    console.log(renderer.name); // "refract"
+    return 1;
+  },
+  onCommitFiberRoot(rendererId, root) {
+    console.log(rendererId, root.current?.type);
+  },
+  onCommitFiberUnmount(rendererId, fiber) {
+    console.log(rendererId, fiber.type);
+  },
+});
+```
+
 ## How It Works
 
 1. `createElement` normalizes children (flattening arrays, converting strings
@@ -120,8 +145,9 @@ Called automatically by `render` on re-renders.
 The benchmark compares Refract against React 19 and Preact 10 rendering an
 identical image gallery app (6 cards with images, captions, and a shuffle
 button). All three apps are built with Vite and served as static production
-bundles. Measurements are taken with Puppeteer over 15 runs per framework with
-the browser cache disabled and external image requests blocked.
+bundles. Measurements are taken with Puppeteer (15 measured + 3 warmup runs per
+framework by default) using round-robin ordering, browser cache disabled, and
+external image requests blocked.
 The results below are from a local run on February 13, 2026.
 
 ### Bundle Size
@@ -152,20 +178,27 @@ frameworks at this scale.
 
 ### Running the Benchmark
 
-Build all three demo apps, then run the benchmark script:
+Recommended:
 
 ```sh
-# Build the Refract demo
-yarn build
+# Standard benchmark (default: 15 measured + 3 warmup)
+make benchmark
 
-# Build the React demo
-cd benchmark/react-demo && yarn install && yarn build && cd ../..
+# Stress benchmark (default: 50 measured + 5 warmup)
+make bench-stress
 
-# Build the Preact demo
-cd benchmark/preact-demo && yarn install && yarn build && cd ../..
+# CI guardrails (fails if Refract DOMContentLoaded p95/sd exceed thresholds)
+make bench-ci
+```
 
-# Install benchmark dependencies and run
-cd benchmark && yarn install && yarn bench
+Custom run counts and thresholds:
+
+```sh
+# Example: deeper stress run
+make bench-stress STRESS_RUNS=100 STRESS_WARMUP=10
+
+# Example: stricter CI thresholds
+make bench-ci CI_RUNS=50 CI_WARMUP=5 CI_DCL_P95_MAX=15 CI_DCL_SD_MAX=1.5
 ```
 
 ## Feature Matrix
@@ -219,7 +252,7 @@ How Refract compares to React and Preact:
 | Automatic batching             | Yes     | Yes   | Yes    |
 | memo / PureComponent           | Yes     | Yes   | Yes    |
 | **Ecosystem**                  |         |       |        |
-| DevTools                       | No      | Yes   | Yes    |
+| DevTools                       | Basic (hook API) | Yes   | Yes    |
 | React compatibility layer      | N/A     | N/A   | Yes    |
 | **Bundle Size (gzip)**         | ~3.4 kB | ~59.5 kB | ~6.0 kB |
 

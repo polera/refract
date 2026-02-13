@@ -73,16 +73,13 @@ function serveDir(dir, port) {
   });
 }
 
-async function measureLoadTime(browser, url, label, runs = 10) {
-  const times = [];
-
-  for (let i = 0; i < runs; i++) {
-    const page = await browser.newPage();
-
-    // Disable cache to get consistent measurements
+async function measureLoadSample(browser, url) {
+  const page = await browser.newPage();
+  try {
+    // Disable cache to get consistent measurements.
     await page.setCacheEnabled(false);
 
-    // Block external image requests to isolate JS/rendering perf
+    // Block external image requests to isolate JS/rendering perf.
     await page.setRequestInterception(true);
     page.on("request", (req) => {
       if (req.url().includes("picsum.photos")) {
@@ -96,7 +93,7 @@ async function measureLoadTime(browser, url, label, runs = 10) {
     await page.goto(url, { waitUntil: "domcontentloaded" });
     const domContentLoaded = performance.now() - start;
 
-    // Measure when the app div has children (framework has rendered)
+    // Measure when the app div has children (framework has rendered).
     const renderTime = await page.evaluate(() => {
       const start = performance.now();
       return new Promise((resolve) => {
@@ -112,7 +109,7 @@ async function measureLoadTime(browser, url, label, runs = 10) {
       });
     });
 
-    // Get Performance API metrics from the page
+    // Get Performance API metrics from the page.
     const perfMetrics = await page.evaluate(() => {
       const entries = performance.getEntriesByType("navigation");
       const nav = entries[0];
@@ -125,16 +122,14 @@ async function measureLoadTime(browser, url, label, runs = 10) {
       };
     });
 
-    times.push({
+    return {
       domContentLoaded,
       renderTime,
       ...perfMetrics,
-    });
-
+    };
+  } finally {
     await page.close();
   }
-
-  return times;
 }
 
 function median(arr) {
@@ -143,25 +138,72 @@ function median(arr) {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
+function percentile(values, p) {
+  if (values.length === 0) return NaN;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.ceil((p / 100) * sorted.length) - 1;
+  const clamped = Math.max(0, Math.min(sorted.length - 1, index));
+  return sorted[clamped];
+}
+
 function stats(values) {
   const med = median(values);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const avg = values.reduce((a, b) => a + b, 0) / values.length;
-  return { median: med, min, max, avg };
+  const variance = values.reduce((sum, value) => sum + (value - avg) ** 2, 0) / values.length;
+  return { median: med, min, max, avg, stddev: Math.sqrt(variance), p95: percentile(values, 95) };
+}
+
+function formatRatio(numerator, denominator) {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return "-";
+  return `${(numerator / denominator).toFixed(1)}x`;
+}
+
+function readPositiveInt(name, fallback) {
+  const raw = process.env[name];
+  if (raw == null || raw === "") return fallback;
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isInteger(value) || value <= 0) return fallback;
+  return value;
+}
+
+function readNonNegativeInt(name, fallback) {
+  const raw = process.env[name];
+  if (raw == null || raw === "") return fallback;
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isInteger(value) || value < 0) return fallback;
+  return value;
+}
+
+function readPositiveFloat(name, fallback) {
+  const raw = process.env[name];
+  if (raw == null || raw === "") return fallback;
+  const value = Number.parseFloat(raw);
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return value;
 }
 
 // --- Framework definitions ---
 
 const frameworks = [
-  { label: "Refract", dist: join(__dirname, "..", "demo", "dist"), port: 4001 },
-  { label: "React",   dist: join(__dirname, "react-demo", "dist"), port: 4002 },
-  { label: "Preact",  dist: join(__dirname, "preact-demo", "dist"), port: 4003 },
+  {
+    label: "Refract",
+    dist: join(__dirname, "..", "demo", "dist"),
+    port: 4001,
+    path: "/?inspector=0",
+  },
+  { label: "React", dist: join(__dirname, "react-demo", "dist"), port: 4002, path: "/" },
+  { label: "Preact", dist: join(__dirname, "preact-demo", "dist"), port: 4003, path: "/" },
 ];
 
 // --- Main ---
 
-const RUNS = 15;
+const RUNS = readPositiveInt("BENCH_RUNS", 15);
+const WARMUP_RUNS = readNonNegativeInt("BENCH_WARMUP", 3);
+const GUARDRAILS_ENABLED = process.env.BENCH_GUARDRAILS === "1";
+const DCL_P95_MAX = readPositiveFloat("BENCH_GUARDRAIL_DCL_P95_MAX", 16);
+const DCL_SD_MAX = readPositiveFloat("BENCH_GUARDRAIL_DCL_SD_MAX", 2);
 
 console.log("=".repeat(60));
 console.log("  Refract vs React vs Preact — Load Time Benchmark");
@@ -197,7 +239,9 @@ for (const fw of frameworks) {
 // 2. Load time comparison
 console.log("\n");
 console.log("⏱  LOAD TIME MEASUREMENTS");
-console.log(`   (${RUNS} runs per framework, cache disabled, images blocked)`);
+console.log(
+  `   (${RUNS} measured + ${WARMUP_RUNS} warmup runs per framework, cache disabled, images blocked, round-robin order)`,
+);
 console.log("-".repeat(50));
 
 const servers = [];
@@ -206,15 +250,28 @@ for (const fw of frameworks) {
 }
 
 const browser = await puppeteer.launch({ headless: true });
-
 const timings = {};
 for (const fw of frameworks) {
-  timings[fw.label] = await measureLoadTime(browser, `http://localhost:${fw.port}`, fw.label, RUNS);
+  timings[fw.label] = [];
 }
 
-await browser.close();
-for (const server of servers) {
-  server.close();
+const totalRuns = RUNS + WARMUP_RUNS;
+
+try {
+  for (let run = 0; run < totalRuns; run++) {
+    for (let offset = 0; offset < frameworks.length; offset++) {
+      const fw = frameworks[(run + offset) % frameworks.length];
+      const sample = await measureLoadSample(browser, `http://localhost:${fw.port}${fw.path ?? "/"}`);
+      if (run >= WARMUP_RUNS) {
+        timings[fw.label].push(sample);
+      }
+    }
+  }
+} finally {
+  await browser.close();
+  for (const server of servers) {
+    server.close();
+  }
 }
 
 function printTimingTable(label, times) {
@@ -229,8 +286,10 @@ function printTimingTable(label, times) {
     const s = stats(values);
     console.log(
       `    ${name.padEnd(22)} median: ${s.median.toFixed(2).padStart(7)}ms` +
+      `   p95: ${s.p95.toFixed(2).padStart(7)}ms` +
       `   min: ${s.min.toFixed(2).padStart(7)}ms` +
-      `   max: ${s.max.toFixed(2).padStart(7)}ms`
+      `   max: ${s.max.toFixed(2).padStart(7)}ms` +
+      `   sd: ${s.stddev.toFixed(2).padStart(6)}`
     );
   }
 }
@@ -274,17 +333,56 @@ console.log(
 );
 console.log(`  ${"─".repeat(col1 + col2 + col3 + col4 + col5 + col6 + 5)}`);
 console.log(
-  `  ${"JS bundle (raw)".padEnd(col1)} ${formatBytes(sizes["Refract"].raw).padStart(col2)} ${formatBytes(sizes["React"].raw).padStart(col3)} ${formatBytes(sizes["Preact"].raw).padStart(col4)} ${((sizes["React"].raw / sizes["Refract"].raw).toFixed(1) + "x").padStart(col5)} ${((sizes["Preact"].raw / sizes["Refract"].raw).toFixed(1) + "x").padStart(col6)}`
+  `  ${"JS bundle (raw)".padEnd(col1)} ${formatBytes(sizes["Refract"].raw).padStart(col2)} ${formatBytes(sizes["React"].raw).padStart(col3)} ${formatBytes(sizes["Preact"].raw).padStart(col4)} ${formatRatio(sizes["React"].raw, sizes["Refract"].raw).padStart(col5)} ${formatRatio(sizes["Preact"].raw, sizes["Refract"].raw).padStart(col6)}`
 );
 console.log(
-  `  ${"JS bundle (gzip)".padEnd(col1)} ${formatBytes(sizes["Refract"].gzip).padStart(col2)} ${formatBytes(sizes["React"].gzip).padStart(col3)} ${formatBytes(sizes["Preact"].gzip).padStart(col4)} ${((sizes["React"].gzip / sizes["Refract"].gzip).toFixed(1) + "x").padStart(col5)} ${((sizes["Preact"].gzip / sizes["Refract"].gzip).toFixed(1) + "x").padStart(col6)}`
+  `  ${"JS bundle (gzip)".padEnd(col1)} ${formatBytes(sizes["Refract"].gzip).padStart(col2)} ${formatBytes(sizes["React"].gzip).padStart(col3)} ${formatBytes(sizes["Preact"].gzip).padStart(col4)} ${formatRatio(sizes["React"].gzip, sizes["Refract"].gzip).padStart(col5)} ${formatRatio(sizes["Preact"].gzip, sizes["Refract"].gzip).padStart(col6)}`
 );
 console.log(
-  `  ${"DOMContentLoaded (med)".padEnd(col1)} ${(dclStats["Refract"].median.toFixed(2) + "ms").padStart(col2)} ${(dclStats["React"].median.toFixed(2) + "ms").padStart(col3)} ${(dclStats["Preact"].median.toFixed(2) + "ms").padStart(col4)} ${((dclStats["React"].median / dclStats["Refract"].median).toFixed(1) + "x").padStart(col5)} ${((dclStats["Preact"].median / dclStats["Refract"].median).toFixed(1) + "x").padStart(col6)}`
+  `  ${"DOMContentLoaded (med)".padEnd(col1)} ${(dclStats["Refract"].median.toFixed(2) + "ms").padStart(col2)} ${(dclStats["React"].median.toFixed(2) + "ms").padStart(col3)} ${(dclStats["Preact"].median.toFixed(2) + "ms").padStart(col4)} ${formatRatio(dclStats["React"].median, dclStats["Refract"].median).padStart(col5)} ${formatRatio(dclStats["Preact"].median, dclStats["Refract"].median).padStart(col6)}`
 );
 console.log(
-  `  ${"App render (med)".padEnd(col1)} ${(renderStats["Refract"].median.toFixed(2) + "ms").padStart(col2)} ${(renderStats["React"].median.toFixed(2) + "ms").padStart(col3)} ${(renderStats["Preact"].median.toFixed(2) + "ms").padStart(col4)} ${((renderStats["React"].median / renderStats["Refract"].median).toFixed(1) + "x").padStart(col5)} ${((renderStats["Preact"].median / renderStats["Refract"].median).toFixed(1) + "x").padStart(col6)}`
+  `  ${"DOMContentLoaded (p95)".padEnd(col1)} ${(dclStats["Refract"].p95.toFixed(2) + "ms").padStart(col2)} ${(dclStats["React"].p95.toFixed(2) + "ms").padStart(col3)} ${(dclStats["Preact"].p95.toFixed(2) + "ms").padStart(col4)} ${formatRatio(dclStats["React"].p95, dclStats["Refract"].p95).padStart(col5)} ${formatRatio(dclStats["Preact"].p95, dclStats["Refract"].p95).padStart(col6)}`
 );
+console.log(
+  `  ${"DOMContentLoaded (sd)".padEnd(col1)} ${(dclStats["Refract"].stddev.toFixed(2) + "ms").padStart(col2)} ${(dclStats["React"].stddev.toFixed(2) + "ms").padStart(col3)} ${(dclStats["Preact"].stddev.toFixed(2) + "ms").padStart(col4)} ${formatRatio(dclStats["React"].stddev, dclStats["Refract"].stddev).padStart(col5)} ${formatRatio(dclStats["Preact"].stddev, dclStats["Refract"].stddev).padStart(col6)}`
+);
+console.log(
+  `  ${"App render (med)".padEnd(col1)} ${(renderStats["Refract"].median.toFixed(2) + "ms").padStart(col2)} ${(renderStats["React"].median.toFixed(2) + "ms").padStart(col3)} ${(renderStats["Preact"].median.toFixed(2) + "ms").padStart(col4)} ${formatRatio(renderStats["React"].median, renderStats["Refract"].median).padStart(col5)} ${formatRatio(renderStats["Preact"].median, renderStats["Refract"].median).padStart(col6)}`
+);
+
+if (GUARDRAILS_ENABLED) {
+  console.log("\n");
+  console.log("🚦 CI GUARDRAILS");
+  console.log("-".repeat(50));
+
+  const refractDcl = dclStats["Refract"];
+  const checks = [
+    {
+      label: `Refract DOMContentLoaded p95 <= ${DCL_P95_MAX.toFixed(2)}ms`,
+      actual: refractDcl.p95,
+      pass: refractDcl.p95 <= DCL_P95_MAX,
+    },
+    {
+      label: `Refract DOMContentLoaded sd <= ${DCL_SD_MAX.toFixed(2)}ms`,
+      actual: refractDcl.stddev,
+      pass: refractDcl.stddev <= DCL_SD_MAX,
+    },
+  ];
+
+  for (const check of checks) {
+    const status = check.pass ? "PASS" : "FAIL";
+    console.log(`  [${status}] ${check.label} (actual: ${check.actual.toFixed(2)}ms)`);
+  }
+
+  const failures = checks.filter((check) => !check.pass);
+  if (failures.length > 0) {
+    console.log("\n  Guardrails failed.");
+    process.exitCode = 1;
+  } else {
+    console.log("\n  Guardrails passed.");
+  }
+}
 
 console.log("\n" + "=".repeat(60));
 console.log("  Done.");
