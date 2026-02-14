@@ -155,11 +155,6 @@ function stats(values) {
   return { median: med, min, max, avg, stddev: Math.sqrt(variance), p95: percentile(values, 95) };
 }
 
-function formatRatio(numerator, denominator) {
-  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return "-";
-  return `${(numerator / denominator).toFixed(1)}x`;
-}
-
 function readPositiveInt(name, fallback) {
   const raw = process.env[name];
   if (raw == null || raw === "") return fallback;
@@ -187,14 +182,34 @@ function readPositiveFloat(name, fallback) {
 // --- Framework definitions ---
 
 const frameworks = [
+  { label: "Refract (core)", dist: join(__dirname, "refract-core-demo", "dist"), port: 4001, path: "/" },
   {
-    label: "Refract",
-    dist: join(__dirname, "..", "demo", "dist"),
-    port: 4001,
-    path: "/?inspector=0",
+    label: "Refract (core+hooks)",
+    dist: join(__dirname, "refract-core-hooks-demo", "dist"),
+    port: 4002,
+    path: "/",
   },
-  { label: "React", dist: join(__dirname, "react-demo", "dist"), port: 4002, path: "/" },
-  { label: "Preact", dist: join(__dirname, "preact-demo", "dist"), port: 4003, path: "/" },
+  {
+    label: "Refract (core+context)",
+    dist: join(__dirname, "refract-core-context-demo", "dist"),
+    port: 4003,
+    path: "/",
+  },
+  {
+    label: "Refract (core+memo)",
+    dist: join(__dirname, "refract-core-memo-demo", "dist"),
+    port: 4004,
+    path: "/",
+  },
+  {
+    label: "Refract (core+security)",
+    dist: join(__dirname, "refract-core-security-demo", "dist"),
+    port: 4005,
+    path: "/",
+  },
+  { label: "Refract (refract)", dist: join(__dirname, "refract-full-demo", "dist"), port: 4006, path: "/" },
+  { label: "React", dist: join(__dirname, "react-demo", "dist"), port: 4007, path: "/" },
+  { label: "Preact", dist: join(__dirname, "preact-demo", "dist"), port: 4008, path: "/" },
 ];
 
 // --- Main ---
@@ -206,9 +221,10 @@ const DCL_P95_MAX = readPositiveFloat("BENCH_GUARDRAIL_DCL_P95_MAX", 16);
 const DCL_SD_MAX = readPositiveFloat("BENCH_GUARDRAIL_DCL_SD_MAX", 2);
 const CI_MODE = process.env.CI === "true" || process.env.CI === "1";
 const PUPPETEER_EXECUTABLE_PATH = process.env.PUPPETEER_EXECUTABLE_PATH;
+const GUARDRAIL_FRAMEWORK_LABEL = "Refract (refract)";
 
 console.log("=".repeat(60));
-console.log("  Refract vs React vs Preact — Load Time Benchmark");
+console.log("  Refract Entrypoints vs React vs Preact — Load Time Benchmark");
 console.log("=".repeat(60));
 console.log();
 
@@ -329,66 +345,58 @@ for (const fw of frameworks) {
   renderStats[fw.label] = stats(timings[fw.label].map((t) => t.renderTime));
 }
 
-const col1 = 25;
-const col2 = 12;
-const col3 = 12;
-const col4 = 12;
-const col5 = 12;
-const col6 = 12;
+const colFramework = 30;
+const colMetric = 12;
 
 console.log(
-  `  ${"Metric".padEnd(col1)} ${"Refract".padStart(col2)} ${"React".padStart(col3)} ${"Preact".padStart(col4)} ${"vs React".padStart(col5)} ${"vs Preact".padStart(col6)}`
+  `  ${"Framework".padEnd(colFramework)} ${"JS raw".padStart(colMetric)} ${"JS gzip".padStart(colMetric)} ${"DCL med".padStart(colMetric)} ${"DCL p95".padStart(colMetric)} ${"DCL sd".padStart(colMetric)} ${"Render med".padStart(colMetric)}`
 );
-console.log(`  ${"─".repeat(col1 + col2 + col3 + col4 + col5 + col6 + 5)}`);
-console.log(
-  `  ${"JS bundle (raw)".padEnd(col1)} ${formatBytes(sizes["Refract"].raw).padStart(col2)} ${formatBytes(sizes["React"].raw).padStart(col3)} ${formatBytes(sizes["Preact"].raw).padStart(col4)} ${formatRatio(sizes["React"].raw, sizes["Refract"].raw).padStart(col5)} ${formatRatio(sizes["Preact"].raw, sizes["Refract"].raw).padStart(col6)}`
-);
-console.log(
-  `  ${"JS bundle (gzip)".padEnd(col1)} ${formatBytes(sizes["Refract"].gzip).padStart(col2)} ${formatBytes(sizes["React"].gzip).padStart(col3)} ${formatBytes(sizes["Preact"].gzip).padStart(col4)} ${formatRatio(sizes["React"].gzip, sizes["Refract"].gzip).padStart(col5)} ${formatRatio(sizes["Preact"].gzip, sizes["Refract"].gzip).padStart(col6)}`
-);
-console.log(
-  `  ${"DOMContentLoaded (med)".padEnd(col1)} ${(dclStats["Refract"].median.toFixed(2) + "ms").padStart(col2)} ${(dclStats["React"].median.toFixed(2) + "ms").padStart(col3)} ${(dclStats["Preact"].median.toFixed(2) + "ms").padStart(col4)} ${formatRatio(dclStats["React"].median, dclStats["Refract"].median).padStart(col5)} ${formatRatio(dclStats["Preact"].median, dclStats["Refract"].median).padStart(col6)}`
-);
-console.log(
-  `  ${"DOMContentLoaded (p95)".padEnd(col1)} ${(dclStats["Refract"].p95.toFixed(2) + "ms").padStart(col2)} ${(dclStats["React"].p95.toFixed(2) + "ms").padStart(col3)} ${(dclStats["Preact"].p95.toFixed(2) + "ms").padStart(col4)} ${formatRatio(dclStats["React"].p95, dclStats["Refract"].p95).padStart(col5)} ${formatRatio(dclStats["Preact"].p95, dclStats["Refract"].p95).padStart(col6)}`
-);
-console.log(
-  `  ${"DOMContentLoaded (sd)".padEnd(col1)} ${(dclStats["Refract"].stddev.toFixed(2) + "ms").padStart(col2)} ${(dclStats["React"].stddev.toFixed(2) + "ms").padStart(col3)} ${(dclStats["Preact"].stddev.toFixed(2) + "ms").padStart(col4)} ${formatRatio(dclStats["React"].stddev, dclStats["Refract"].stddev).padStart(col5)} ${formatRatio(dclStats["Preact"].stddev, dclStats["Refract"].stddev).padStart(col6)}`
-);
-console.log(
-  `  ${"App render (med)".padEnd(col1)} ${(renderStats["Refract"].median.toFixed(2) + "ms").padStart(col2)} ${(renderStats["React"].median.toFixed(2) + "ms").padStart(col3)} ${(renderStats["Preact"].median.toFixed(2) + "ms").padStart(col4)} ${formatRatio(renderStats["React"].median, renderStats["Refract"].median).padStart(col5)} ${formatRatio(renderStats["Preact"].median, renderStats["Refract"].median).padStart(col6)}`
-);
+console.log(`  ${"─".repeat(colFramework + colMetric * 6 + 6)}`);
+
+for (const fw of frameworks) {
+  const label = fw.label;
+  const dcl = dclStats[label];
+  const render = renderStats[label];
+  console.log(
+    `  ${label.padEnd(colFramework)} ${formatBytes(sizes[label].raw).padStart(colMetric)} ${formatBytes(sizes[label].gzip).padStart(colMetric)} ${(dcl.median.toFixed(2) + "ms").padStart(colMetric)} ${(dcl.p95.toFixed(2) + "ms").padStart(colMetric)} ${(dcl.stddev.toFixed(2) + "ms").padStart(colMetric)} ${(render.median.toFixed(2) + "ms").padStart(colMetric)}`,
+  );
+}
 
 if (GUARDRAILS_ENABLED) {
   console.log("\n");
   console.log("🚦 CI GUARDRAILS");
   console.log("-".repeat(50));
 
-  const refractDcl = dclStats["Refract"];
-  const checks = [
-    {
-      label: `Refract DOMContentLoaded p95 <= ${DCL_P95_MAX.toFixed(2)}ms`,
-      actual: refractDcl.p95,
-      pass: refractDcl.p95 <= DCL_P95_MAX,
-    },
-    {
-      label: `Refract DOMContentLoaded sd <= ${DCL_SD_MAX.toFixed(2)}ms`,
-      actual: refractDcl.stddev,
-      pass: refractDcl.stddev <= DCL_SD_MAX,
-    },
-  ];
-
-  for (const check of checks) {
-    const status = check.pass ? "PASS" : "FAIL";
-    console.log(`  [${status}] ${check.label} (actual: ${check.actual.toFixed(2)}ms)`);
-  }
-
-  const failures = checks.filter((check) => !check.pass);
-  if (failures.length > 0) {
-    console.log("\n  Guardrails failed.");
+  const refractDcl = dclStats[GUARDRAIL_FRAMEWORK_LABEL];
+  if (!refractDcl) {
+    console.log(`  [FAIL] Missing guardrail framework: ${GUARDRAIL_FRAMEWORK_LABEL}`);
     process.exitCode = 1;
   } else {
-    console.log("\n  Guardrails passed.");
+    const checks = [
+      {
+        label: `${GUARDRAIL_FRAMEWORK_LABEL} DOMContentLoaded p95 <= ${DCL_P95_MAX.toFixed(2)}ms`,
+        actual: refractDcl.p95,
+        pass: refractDcl.p95 <= DCL_P95_MAX,
+      },
+      {
+        label: `${GUARDRAIL_FRAMEWORK_LABEL} DOMContentLoaded sd <= ${DCL_SD_MAX.toFixed(2)}ms`,
+        actual: refractDcl.stddev,
+        pass: refractDcl.stddev <= DCL_SD_MAX,
+      },
+    ];
+
+    for (const check of checks) {
+      const status = check.pass ? "PASS" : "FAIL";
+      console.log(`  [${status}] ${check.label} (actual: ${check.actual.toFixed(2)}ms)`);
+    }
+
+    const failures = checks.filter((check) => !check.pass);
+    if (failures.length > 0) {
+      console.log("\n  Guardrails failed.");
+      process.exitCode = 1;
+    } else {
+      console.log("\n  Guardrails passed.");
+    }
   }
 }
 

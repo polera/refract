@@ -33,6 +33,9 @@ jobs:
       - name: Install root dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Run unit tests
+        run: yarn test
+
       - name: Install benchmark dependencies
         run: yarn --cwd benchmark install --frozen-lockfile
 
@@ -48,5 +51,4 @@ jobs:
         run: |
           set -euo pipefail
           make bench-ci | tee benchmark-output.txt
-
 

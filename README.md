@@ -2,8 +2,8 @@
 
 A minimal React-like virtual DOM library focused on image rendering. Refract
 implements the core ideas behind React -- a virtual DOM, createElement, render,
-reconciliation, hooks, context, and memo -- in TypeScript, producing a
-JavaScript bundle roughly 22x smaller than React.
+reconciliation, hooks, context, and memo -- in TypeScript, with split
+entrypoints so you can keep bundles small.
 
 ## LLM Disclosure
 I generated this using Claude Opus 4.6 and gpt-5.3-codex as an experiment.
@@ -14,13 +14,13 @@ I generated this using Claude Opus 4.6 and gpt-5.3-codex as an experiment.
 - **Fragments** -- group children without extra DOM nodes
 - **render** -- mounts a VNode tree into a real DOM container
 - **Fiber-based reconciliation** -- keyed and positional diffing with minimal DOM patches
-- **Hooks** -- useState, useEffect, useRef, useMemo, useCallback, useReducer, useContext, useErrorBoundary
+- **Hooks** -- useState, useEffect, useRef, useMemo, useCallback, useReducer, useErrorBoundary
 - **Context API** -- createContext / Provider for dependency injection
 - **memo** -- skip re-renders when props are unchanged
 - **Refs** -- createRef and callback refs via the `ref` prop
 - **Error boundaries** -- catch and recover from render errors
 - **SVG support** -- automatic SVG namespace handling
-- **dangerouslySetInnerHTML** -- raw HTML injection with a default sanitizer and configurable `setHtmlSanitizer` override
+- **dangerouslySetInnerHTML** -- raw HTML injection with sanitizer defaults in `refract/full` and configurable `setHtmlSanitizer` override
 - **Automatic batching** -- state updates are batched via microtask queue
 - **DevTools hook support** -- emits commit/unmount snapshots to a global hook or explicit hook instance
 
@@ -32,18 +32,21 @@ No JSX transform is required, but the library works with one. The tsconfig maps
 ```
 refract/
   src/refract/
-    types.ts          -- VNode, Fiber, Props, Hook type definitions
-    createElement.ts  -- VNode factory + Fragment symbol
-    fiber.ts          -- fiber-based renderer, commit, memo, effects
-    devtools.ts       -- optional devtools bridge + snapshot serialization
-    reconcile.ts      -- keyed + positional child diffing
-    hooks.ts          -- useState, useEffect, useRef, useMemo, useCallback, useReducer, useErrorBoundary
-    context.ts        -- createContext + useContext
-    render.ts         -- public render() entry point
-    index.ts          -- public API barrel export
-  demo/               -- image gallery demo app
-  tests/              -- Vitest unit tests
-  benchmark/          -- Puppeteer-based benchmark vs React & Preact
+    createElement.ts      -- VNode factory + Fragment symbol
+    coreRenderer.ts       -- render work loop + commit + batched updates
+    reconcile.ts          -- keyed + positional child diffing
+    dom.ts                -- DOM creation/prop patching + sanitizer hooks
+    renderCore.ts         -- minimal render() entrypoint used by `refract/core`
+    render.ts             -- full render() entrypoint (auto-enables security defaults)
+    hooksRuntime.ts       -- effect scheduling + cleanup lifecycle wiring
+    runtimeExtensions.ts  -- runtime plugin hooks (memo/devtools/effects/errors)
+    devtools.ts           -- optional devtools bridge + snapshot serialization
+    full.ts               -- full public API exports
+    core.ts               -- minimal public API exports
+    features/             -- feature modules (`hooks`, `context`, `memoRuntime`, `security`)
+  demo/                   -- image gallery demo app
+  tests/                  -- Vitest unit tests
+  benchmark/              -- Puppeteer benchmark: Refract entrypoint matrix vs React & Preact
 ```
 
 ## Getting Started
@@ -66,8 +69,8 @@ yarn test
 
 ## Entrypoints
 
-- `refract/core` -- minimal runtime surface (`createElement`, `Fragment`, `render`)
-- `refract/full` -- complete API including hooks, context, memo, sanitizer, and devtools integration
+- `refract/core` -- minimal runtime surface (`createElement`, `Fragment`, `render`) with no default HTML sanitizer
+- `refract/full` -- complete API including hooks, context, memo, sanitizer defaults, and devtools integration
 - `refract` -- alias of `refract/full` for backward compatibility
 - Feature entrypoints for custom bundles: `refract/hooks`, `refract/context`, `refract/memo`, `refract/security`, `refract/devtools`
 
@@ -75,8 +78,8 @@ yarn test
 
 ### createElement(type, props, ...children)
 
-Creates a virtual DOM node. If `type` is a function, it is called as a
-functional component.
+Creates a virtual DOM node. If `type` is a function, it is treated as a
+functional component and invoked during render/reconciliation.
 
 ```ts
 import { createElement } from "refract";
@@ -98,10 +101,8 @@ import { render } from "refract";
 render(vnode, document.getElementById("app")!);
 ```
 
-### reconcile(parent, oldVNode, newVNode, index)
-
-Low-level function that diffs two VNode trees and applies minimal DOM mutations.
-Called automatically by `render` on re-renders.
+Reconciliation is internal and is triggered automatically by `render` on
+subsequent renders to the same container.
 
 ### DevTools hook integration
 
@@ -149,38 +150,42 @@ setDevtoolsHook({
 
 ## Benchmark
 
-The benchmark compares Refract against React 19 and Preact 10 rendering an
-identical image gallery app (6 cards with images, captions, and a shuffle
-button). All three apps are built with Vite and served as static production
-bundles. Measurements are taken with Puppeteer (15 measured + 3 warmup runs per
-framework by default) using round-robin ordering, browser cache disabled, and
-external image requests blocked.
-The results below are from a local run on February 13, 2026.
+The benchmark compares Refract entrypoint combinations against React 19 and
+Preact 10, all rendering the same image gallery app (6 cards + shuffle).
+Refract variants benchmarked:
 
-### Bundle Size
+- `refract/core`
+- `refract/core` + `refract/hooks`
+- `refract/core` + `refract/context`
+- `refract/core` + `refract/memo`
+- `refract/core` + `refract/security`
+- `refract` (full entrypoint)
 
-| Metric           | Refract   | React      | Preact    |
-|------------------|-----------|------------|-----------|
-| JS bundle (raw)  | 8.48 kB   | 189.74 kB  | 14.46 kB  |
-| JS bundle (gzip) | 3.26 kB   | 59.52 kB   | 5.95 kB   |
-| All assets (raw) | 11.27 kB  | 191.01 kB  | 15.74 kB  |
+All benchmark apps are built with Vite and served as static production bundles.
+Measurements are taken with Puppeteer (15 measured + 3 warmup runs per
+framework by default), with round-robin ordering, cache disabled, and external
+image requests blocked.
 
-### Load Time (median of 15 runs)
+### Bundle Size Snapshot
 
-| Metric           | Refract   | React     | Preact    |
-|------------------|-----------|-----------|-----------|
-| DOM Interactive   | 6.70 ms   | 6.50 ms   | 6.60 ms   |
-| DOMContentLoaded  | 11.60 ms  | 18.60 ms  | 11.90 ms  |
-| App Render (rAF)  | <0.1 ms   | <0.1 ms   | 0.1 ms    |
+The values below are from a local run on February 14, 2026.
 
-Refract's production JS bundle is ~22.4x smaller than React's and ~1.7x smaller
-than Preact's before compression. After gzip, Refract is ~18.2x smaller than
-React and ~1.8x smaller than Preact. With the current feature set (hooks,
-context, memo, keyed reconciliation, fragments, error boundaries, sanitizer, and
-fiber architecture), Refract is still small in absolute terms at ~8.5 kB raw /
-~3.3 kB gzip for JS. The DOMContentLoaded median is ~1.6x faster than React and
-slightly faster than Preact in this run (11.6 ms vs 11.9 ms). App render time is
-negligible for all three frameworks at this scale.
+| Framework                  | JS bundle (raw) | JS bundle (gzip) |
+|---------------------------|----------------:|-----------------:|
+| Refract (`core`)          | 7.23 kB         | 2.85 kB          |
+| Refract (`core+hooks`)    | 8.53 kB         | 3.30 kB          |
+| Refract (`core+context`)  | 7.72 kB         | 3.07 kB          |
+| Refract (`core+memo`)     | 7.87 kB         | 3.08 kB          |
+| Refract (`core+security`) | 8.29 kB         | 3.21 kB          |
+| Refract (`refract`)       | 13.35 kB        | 4.94 kB          |
+| React                     | 189.74 kB       | 59.52 kB         |
+| Preact                    | 14.46 kB        | 5.95 kB          |
+
+Load-time metrics are machine-dependent, so the benchmark script prints a fresh
+per-run timing table (median, p95, min/max, sd) for every framework.
+
+From this snapshot, Refract `core` gzip JS is about 20.9x smaller than React,
+and the full `refract` entrypoint is about 12.0x smaller.
 
 ### Component Combination Benchmarks (Vitest)
 
@@ -212,21 +217,21 @@ make benchmark
 # Stress benchmark (default: 50 measured + 5 warmup)
 make bench-stress
 
-# CI guardrails (fails if Refract DOMContentLoaded p95/sd exceed thresholds)
+# CI benchmark preset (CI-oriented run counts + benchmark flags)
 make bench-ci
 
 # Component-combination microbenchmarks (32 cases)
 yarn bench:components
 ```
 
-Custom run counts and thresholds:
+Custom run counts:
 
 ```sh
 # Example: deeper stress run
 make bench-stress STRESS_RUNS=100 STRESS_WARMUP=10
 
-# Example: stricter CI thresholds
-make bench-ci CI_RUNS=50 CI_WARMUP=5 CI_DCL_P95_MAX=15 CI_DCL_SD_MAX=1.5
+# Example: deeper CI run
+make bench-ci CI_RUNS=50 CI_WARMUP=5
 ```
 
 ## Feature Matrix
@@ -282,11 +287,12 @@ How Refract compares to React and Preact:
 | **Ecosystem**                  |         |       |        |
 | DevTools                       | Basic (hook API) | Yes   | Yes    |
 | React compatibility layer      | N/A     | N/A   | Yes    |
-| **Bundle Size (gzip)**         | ~3.3 kB | ~59.5 kB | ~6.0 kB |
+| **Bundle Size (gzip, JS)**     | ~2.9-4.9 kB⁴ | ~59.5 kB | ~6.0 kB |
 
 ¹ Preact supports both `class` and `className`.
 ² Preact has partial Suspense support via `preact/compat`.
 ³ Refract uses the `useErrorBoundary` hook rather than class-based error boundaries.
+⁴ Refract size depends on entrypoint (`refract/core` vs `refract` full).
 
 ## License
 
