@@ -101,18 +101,40 @@ function advanceWork(fiber: Fiber): void {
   }
 }
 
-/** Find the next DOM sibling for insertion (skips fragments/components and uncommitted nodes) */
+/** Find the next DOM sibling for insertion (skips siblings being placed/moved) */
 function getNextDomSibling(fiber: Fiber): Node | null {
   let sib: Fiber | null = fiber.sibling;
   while (sib) {
-    if (sib.dom && !(sib.flags & PLACEMENT)) return sib.dom;
-    if (!sib.dom && sib.child) {
+    // Skip any sibling that is itself being placed/moved
+    if (sib.flags & PLACEMENT) {
+      sib = sib.sibling;
+      continue;
+    }
+    if (sib.dom) return sib.dom;
+    if (sib.child) {
       const childDom = getFirstCommittedDom(sib);
       if (childDom) return childDom;
     }
     sib = sib.sibling;
   }
   return null;
+}
+
+/** Collect all DOM nodes from a component/fragment fiber's subtree */
+function collectChildDomNodes(fiber: Fiber): Node[] {
+  const nodes: Node[] = [];
+  function walk(f: Fiber | null): void {
+    while (f) {
+      if (f.dom) {
+        nodes.push(f.dom);
+      } else {
+        walk(f.child);
+      }
+      f = f.sibling;
+    }
+  }
+  walk(fiber.child);
+  return nodes;
 }
 
 /** Get the first committed DOM node in a fiber subtree */
@@ -144,12 +166,25 @@ function commitWork(fiber: Fiber): void {
   }
   const parentDom = parentFiber!.dom!;
 
-  if (fiber.flags & PLACEMENT && fiber.dom) {
-    const before = getNextDomSibling(fiber);
-    if (before) {
-      parentDom.insertBefore(fiber.dom, before);
+  if (fiber.flags & PLACEMENT) {
+    if (fiber.dom) {
+      const before = getNextDomSibling(fiber);
+      if (before) {
+        parentDom.insertBefore(fiber.dom, before);
+      } else {
+        parentDom.appendChild(fiber.dom);
+      }
     } else {
-      parentDom.appendChild(fiber.dom);
+      // Component/fragment: move all child DOM nodes
+      const domNodes = collectChildDomNodes(fiber);
+      const before = getNextDomSibling(fiber);
+      for (const dom of domNodes) {
+        if (before) {
+          parentDom.insertBefore(dom, before);
+        } else {
+          parentDom.appendChild(dom);
+        }
+      }
     }
   } else if (fiber.flags & UPDATE && fiber.dom) {
     if (fiber.type === "TEXT") {
