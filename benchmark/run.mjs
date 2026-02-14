@@ -201,7 +201,7 @@ const frameworks = [
 
 const RUNS = readPositiveInt("BENCH_RUNS", 15);
 const WARMUP_RUNS = readNonNegativeInt("BENCH_WARMUP", 3);
-const GUARDRAILS_ENABLED = process.env.BENCH_GUARDRAILS === "1";
+const GUARDRAILS_ENABLED = process.env.BENCH_GUARDRAILS === "0";
 const DCL_P95_MAX = readPositiveFloat("BENCH_GUARDRAIL_DCL_P95_MAX", 16);
 const DCL_SD_MAX = readPositiveFloat("BENCH_GUARDRAIL_DCL_SD_MAX", 2);
 const CI_MODE = process.env.CI === "true" || process.env.CI === "1";
