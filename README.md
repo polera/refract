@@ -172,20 +172,20 @@ The values below are from a local run on February 14, 2026.
 
 | Framework                  | JS bundle (raw) | JS bundle (gzip) |
 |---------------------------|----------------:|-----------------:|
-| Refract (`core`)          | 7.23 kB         | 2.85 kB          |
-| Refract (`core+hooks`)    | 8.53 kB         | 3.30 kB          |
-| Refract (`core+context`)  | 7.72 kB         | 3.07 kB          |
-| Refract (`core+memo`)     | 7.87 kB         | 3.08 kB          |
-| Refract (`core+security`) | 8.29 kB         | 3.21 kB          |
-| Refract (`refract`)       | 13.35 kB        | 4.94 kB          |
+| Refract (`core`)          | 7.44 kB         | 2.91 kB          |
+| Refract (`core+hooks`)    | 8.74 kB         | 3.36 kB          |
+| Refract (`core+context`)  | 7.92 kB         | 3.14 kB          |
+| Refract (`core+memo`)     | 8.07 kB         | 3.14 kB          |
+| Refract (`core+security`) | 8.49 kB         | 3.27 kB          |
+| Refract (`refract`)       | 13.55 kB        | 5.01 kB          |
 | React                     | 189.74 kB       | 59.52 kB         |
 | Preact                    | 14.46 kB        | 5.95 kB          |
 
 Load-time metrics are machine-dependent, so the benchmark script prints a fresh
 per-run timing table (median, p95, min/max, sd) for every framework.
 
-From this snapshot, Refract `core` gzip JS is about 20.9x smaller than React,
-and the full `refract` entrypoint is about 12.0x smaller.
+From this snapshot, Refract `core` gzip JS is about 20.5x smaller than React,
+and the full `refract` entrypoint is about 11.9x smaller.
 
 ### Component Combination Benchmarks (Vitest)
 
@@ -195,16 +195,16 @@ Higher `hz` is better.
 
 | Component usage profile | Mount (hz) | Mount vs base | Reconcile (hz) | Reconcile vs base |
 |-------------------------|------------|---------------|----------------|-------------------|
-| `base` | 6470.45 | baseline | 4871.40 | baseline |
-| `memo` | 7582.27 | +17.2% | 4601.29 | -5.6% |
-| `context` | 7815.08 | +20.8% | 6457.19 | +32.6% |
-| `fragment` | 7799.50 | +20.5% | 6185.38 | +27.0% |
-| `keyed` | 7456.51 | +15.2% | 6738.82 | +38.3% |
-| `memo+context+keyed` | 8098.85 | +25.2% | 7179.70 | +47.4% |
-| `memo+fragment+keyed` | 5587.46 | -13.7% | 7329.55 | +50.5% |
+| `base` | 5106.18 | baseline | 4318.36 | baseline |
+| `memo` | 5859.77 | +14.8% | 3980.85 | -7.8% |
+| `context` | 3555.39 | -30.4% | 5134.53 | +18.9% |
+| `fragment` | 4894.97 | -4.1% | 4122.51 | -4.5% |
+| `keyed` | 5856.46 | +14.7% | 4698.69 | +8.8% |
+| `memo+context` | 6048.46 | +18.4% | 5218.68 | +20.8% |
+| `memo+context+keyed` | 5640.31 | +10.5% | 4682.63 | +8.4% |
 
-In this run, `memo+context+keyed` was the fastest mount profile, while
-`memo+fragment+keyed` was the fastest reconcile profile.
+In this run, `memo+context` was the fastest mount profile, while
+`memo+context` was also the fastest reconcile profile.
 
 ### Running the Benchmark
 
@@ -287,7 +287,7 @@ How Refract compares to React and Preact:
 | **Ecosystem**                  |         |       |        |
 | DevTools                       | Basic (hook API) | Yes   | Yes    |
 | React compatibility layer      | N/A     | N/A   | Yes    |
-| **Bundle Size (gzip, JS)**     | ~2.9-4.9 kB⁴ | ~59.5 kB | ~6.0 kB |
+| **Bundle Size (gzip, JS)**     | ~2.9-5.0 kB⁴ | ~59.5 kB | ~6.0 kB |
 
 ¹ Preact supports both `class` and `className`.
 ² Preact has partial Suspense support via `preact/compat`.
