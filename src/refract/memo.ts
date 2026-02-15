@@ -1,6 +1,6 @@
 import type { Props, VNode } from "./types.js";
 import { MEMO_MARKER, type MemoComponent } from "./memoMarker.js";
-import "./features/memoRuntime.js";
+import { ensureMemoRuntime } from "./features/memoRuntime.js";
 
 /** Shallow equality comparison for memo */
 export function shallowEqual(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
@@ -18,6 +18,7 @@ export function memo(
   component: (props: Props) => VNode,
   compare?: (a: Record<string, unknown>, b: Record<string, unknown>) => boolean,
 ): (props: Props) => VNode {
+  ensureMemoRuntime();
   const memoComp: MemoComponent = ((props: Props) => component(props)) as MemoComponent;
   memoComp._inner = component;
   memoComp._compare = compare ?? shallowEqual;

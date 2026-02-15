@@ -6,7 +6,7 @@ CI_WARMUP ?= 5
 CI_DCL_P95_MAX ?= 16
 CI_DCL_SD_MAX ?= 2
 
-.PHONY: help build build-refract build-refract-core build-refract-core-hooks build-refract-core-context build-refract-core-memo build-refract-core-security build-refract-full build-react build-preact benchmark bench bench-stress bench-ci
+.PHONY: help build build-refract build-refract-core build-refract-core-hooks build-refract-core-context build-refract-core-memo build-refract-core-security build-refract-full build-react build-preact benchmark bench bench-stress bench-ci test
 
 help:
 	@echo "Available targets:"
@@ -15,6 +15,7 @@ help:
 	@echo "  make bench      Alias for benchmark"
 	@echo "  make bench-stress  Build all demo apps and run stress benchmark suite"
 	@echo "  make bench-ci   Build all demo apps and run CI benchmark guardrails"
+	@echo "  make test       Run unit tests"
 
 build: build-refract build-refract-core build-refract-core-hooks build-refract-core-context build-refract-core-memo build-refract-core-security build-refract-full build-react build-preact
 
@@ -60,3 +61,6 @@ bench-ci: build
 	BENCH_GUARDRAIL_DCL_P95_MAX=$(CI_DCL_P95_MAX) \
 	BENCH_GUARDRAIL_DCL_SD_MAX=$(CI_DCL_SD_MAX) \
 	$(YARN) --cwd benchmark bench
+
+test:
+	$(YARN) test

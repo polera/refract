@@ -50,5 +50,12 @@ export function setHtmlSanitizer(sanitizer: HtmlSanitizer | null): void {
   setHtmlSanitizerImpl(sanitizer ?? defaultHtmlSanitizer);
 }
 
-setHtmlSanitizerImpl(defaultHtmlSanitizer);
-setUnsafeUrlPropChecker(isUnsafeUrlProp);
+let initialized = false;
+
+export function ensureSecurityDefaults(): void {
+  if (!initialized) {
+    initialized = true;
+    setHtmlSanitizerImpl(defaultHtmlSanitizer);
+    setUnsafeUrlPropChecker(isUnsafeUrlProp);
+  }
+}
