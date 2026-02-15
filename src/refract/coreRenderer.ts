@@ -2,9 +2,12 @@ import type { VNode, Fiber, Props } from "./types.js";
 import { PLACEMENT, UPDATE } from "./types.js";
 import { reconcileChildren } from "./reconcile.js";
 import { Fragment } from "./createElement.js";
+import { Portal } from "./portal.js";
 import { createDom, applyProps } from "./dom.js";
 import {
+  runAfterComponentRenderHandlers,
   runAfterCommitHandlers,
+  runBeforeComponentRenderHandlers,
   runCommitHandlers,
   runFiberCleanupHandlers,
   shouldBailoutComponent,
@@ -52,6 +55,7 @@ export function renderFiber(vnode: VNode, container: Node): void {
 function performWork(fiber: Fiber): void {
   const isComponent = typeof fiber.type === "function";
   const isFragment = fiber.type === Fragment;
+  const isPortal = fiber.type === Portal;
 
   if (isComponent) {
     if (fiber.alternate && fiber.flags === UPDATE && shouldBailoutComponent(fiber)) {
@@ -62,22 +66,32 @@ function performWork(fiber: Fiber): void {
     fiber._hookIndex = 0;
     if (!fiber.hooks) fiber.hooks = [];
 
-    const comp = fiber.type as (props: Props) => VNode;
+    const comp = fiber.type as (props: Props) => unknown;
+    runBeforeComponentRenderHandlers(fiber);
     try {
-      const children = [comp(fiber.props)];
+      const children = normalizeRenderedChildren(comp(fiber.props));
       reconcileChildren(fiber, children);
     } catch (error) {
       if (!tryHandleRenderError(fiber, error)) throw error;
+    } finally {
+      runAfterComponentRenderHandlers(fiber);
     }
   } else if (isFragment) {
-    reconcileChildren(fiber, fiber.props.children ?? []);
+    reconcileChildren(fiber, normalizeChildrenProp(fiber.props.children));
+  } else if (isPortal) {
+    const container = fiber.props.container;
+    if (!(container instanceof Node)) {
+      throw new TypeError("createPortal expects a valid DOM Node container");
+    }
+    fiber.dom = container;
+    reconcileChildren(fiber, normalizeChildrenProp(fiber.props.children));
   } else {
     if (!fiber.dom) {
       fiber.dom = createDom(fiber);
     }
     // Skip children when dangerouslySetInnerHTML is used
     if (!fiber.props.dangerouslySetInnerHTML) {
-      reconcileChildren(fiber, fiber.props.children ?? []);
+      reconcileChildren(fiber, normalizeChildrenProp(fiber.props.children));
     }
   }
 
@@ -88,6 +102,41 @@ function performWork(fiber: Fiber): void {
   }
 
   advanceWork(fiber);
+}
+
+type RenderedChild = VNode | string | number | boolean | null | undefined | RenderedChild[];
+
+function normalizeRenderedChildren(rendered: unknown): VNode[] {
+  return flattenRenderedChildren([rendered as RenderedChild]);
+}
+
+function normalizeChildrenProp(children: unknown): VNode[] {
+  if (children === undefined) return [];
+  if (Array.isArray(children)) {
+    return flattenRenderedChildren(children as RenderedChild[]);
+  }
+  return flattenRenderedChildren([children as RenderedChild]);
+}
+
+function flattenRenderedChildren(raw: RenderedChild[]): VNode[] {
+  const result: VNode[] = [];
+  for (const child of raw) {
+    if (child == null || typeof child === "boolean") continue;
+    if (Array.isArray(child)) {
+      result.push(...flattenRenderedChildren(child));
+      continue;
+    }
+    if (typeof child === "string" || typeof child === "number") {
+      result.push({ type: "TEXT", props: { nodeValue: String(child) }, key: null });
+      continue;
+    }
+    result.push(child);
+  }
+  return result;
+}
+
+function isPortalFiber(fiber: Fiber): boolean {
+  return fiber.type === Portal;
 }
 
 function advanceWork(fiber: Fiber): void {
@@ -105,6 +154,10 @@ function advanceWork(fiber: Fiber): void {
 function getNextDomSibling(fiber: Fiber): Node | null {
   let sib: Fiber | null = fiber.sibling;
   while (sib) {
+    if (isPortalFiber(sib)) {
+      sib = sib.sibling;
+      continue;
+    }
     // Skip any sibling that is itself being placed/moved
     if (sib.flags & PLACEMENT) {
       sib = sib.sibling;
@@ -125,6 +178,10 @@ function collectChildDomNodes(fiber: Fiber): Node[] {
   const nodes: Node[] = [];
   function walk(f: Fiber | null): void {
     while (f) {
+      if (isPortalFiber(f)) {
+        f = f.sibling;
+        continue;
+      }
       if (f.dom) {
         nodes.push(f.dom);
       } else {
@@ -139,6 +196,7 @@ function collectChildDomNodes(fiber: Fiber): Node[] {
 
 /** Get the first committed DOM node in a fiber subtree */
 function getFirstCommittedDom(fiber: Fiber): Node | null {
+  if (isPortalFiber(fiber)) return null;
   if (fiber.dom && !(fiber.flags & PLACEMENT)) return fiber.dom;
   let child = fiber.child;
   while (child) {
@@ -160,6 +218,13 @@ function commitRoot(rootFiber: Fiber): void {
 }
 
 function commitWork(fiber: Fiber): void {
+  if (isPortalFiber(fiber)) {
+    fiber.flags = 0;
+    if (fiber.child) commitWork(fiber.child);
+    if (fiber.sibling) commitWork(fiber.sibling);
+    return;
+  }
+
   let parentFiber = fiber.parent;
   while (parentFiber && !parentFiber.dom) {
     parentFiber = parentFiber.parent;
@@ -226,7 +291,13 @@ function commitDeletion(fiber: Fiber): void {
   if (fiber.dom && fiber.props.ref) {
     setRef(fiber.props.ref, null);
   }
-  if (fiber.dom) {
+  if (isPortalFiber(fiber)) {
+    let child: Fiber | null = fiber.child;
+    while (child) {
+      commitDeletion(child);
+      child = child.sibling;
+    }
+  } else if (fiber.dom) {
     fiber.dom.parentNode?.removeChild(fiber.dom);
   } else if (fiber.child) {
     // Fragment/component — delete children
@@ -288,4 +359,9 @@ function flushRenders(): void {
     runCommitHandlers(newRoot, committedDeletions);
   }
   pendingContainers.clear();
+}
+
+export function flushPendingRenders(): void {
+  if (!flushScheduled) return;
+  flushRenders();
 }

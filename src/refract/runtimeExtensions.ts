@@ -5,12 +5,16 @@ type AfterCommitHandler = () => void;
 type RenderErrorHandler = (fiber: Fiber, error: unknown) => boolean;
 type CommitHandler = (rootFiber: Fiber, deletions: Fiber[]) => void;
 type ComponentBailoutHandler = (fiber: Fiber) => boolean;
+type BeforeComponentRenderHandler = (fiber: Fiber) => void;
+type AfterComponentRenderHandler = (fiber: Fiber) => void;
 
 const fiberCleanupHandlers = new Set<FiberCleanupHandler>();
 const afterCommitHandlers = new Set<AfterCommitHandler>();
 const renderErrorHandlers = new Set<RenderErrorHandler>();
 const commitHandlers = new Set<CommitHandler>();
 const componentBailoutHandlers = new Set<ComponentBailoutHandler>();
+const beforeComponentRenderHandlers = new Set<BeforeComponentRenderHandler>();
+const afterComponentRenderHandlers = new Set<AfterComponentRenderHandler>();
 
 function makeUnregister<T>(set: Set<T>, value: T): () => void {
   return () => {
@@ -41,6 +45,16 @@ export function registerCommitHandler(handler: CommitHandler): () => void {
 export function registerComponentBailoutHandler(handler: ComponentBailoutHandler): () => void {
   componentBailoutHandlers.add(handler);
   return makeUnregister(componentBailoutHandlers, handler);
+}
+
+export function registerBeforeComponentRenderHandler(handler: BeforeComponentRenderHandler): () => void {
+  beforeComponentRenderHandlers.add(handler);
+  return makeUnregister(beforeComponentRenderHandlers, handler);
+}
+
+export function registerAfterComponentRenderHandler(handler: AfterComponentRenderHandler): () => void {
+  afterComponentRenderHandlers.add(handler);
+  return makeUnregister(afterComponentRenderHandlers, handler);
 }
 
 export function runFiberCleanupHandlers(fiber: Fiber): void {
@@ -77,4 +91,16 @@ export function shouldBailoutComponent(fiber: Fiber): boolean {
     }
   }
   return false;
+}
+
+export function runBeforeComponentRenderHandlers(fiber: Fiber): void {
+  for (const handler of beforeComponentRenderHandlers) {
+    handler(fiber);
+  }
+}
+
+export function runAfterComponentRenderHandlers(fiber: Fiber): void {
+  for (const handler of afterComponentRenderHandlers) {
+    handler(fiber);
+  }
 }

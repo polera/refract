@@ -23,6 +23,24 @@ describe("entrypoints", () => {
     expect(typeof full.setDevtoolsHook).toBe("function");
   });
 
+  it("compat entrypoints are opt-in and expose React-style surfaces", async () => {
+    vi.resetModules();
+    const reactCompat = await import("../src/refract/compat/react.js") as Record<string, unknown>;
+    const reactDomCompat = await import("../src/refract/compat/react-dom.js") as Record<string, unknown>;
+    const reactDomClientCompat = await import("../src/refract/compat/react-dom-client.js") as Record<string, unknown>;
+
+    expect(typeof reactCompat.createElement).toBe("function");
+    expect(typeof reactCompat.forwardRef).toBe("function");
+    expect(typeof reactCompat.useLayoutEffect).toBe("function");
+    expect(typeof reactCompat.useId).toBe("function");
+
+    expect(typeof reactDomCompat.createPortal).toBe("function");
+    expect(typeof reactDomCompat.unstable_batchedUpdates).toBe("function");
+    expect(typeof reactDomCompat.flushSync).toBe("function");
+
+    expect(typeof reactDomClientCompat.createRoot).toBe("function");
+  });
+
   it("core render does not auto-enable the security sanitizer", async () => {
     vi.resetModules();
     const core = await import("../src/refract/core.js");
