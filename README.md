@@ -1,12 +1,19 @@
 # Refract
 
-A minimal React-like virtual DOM library focused on image rendering. Refract
-implements the core ideas behind React -- a virtual DOM, createElement, render,
-reconciliation, hooks, context, and memo -- in TypeScript, with split
-entrypoints so you can keep bundles small.
+A minimal React-like virtual DOM library, written in TypeScript with split entrypoints
+so you can keep bundles small and targetetd.
+
+Refract implements the core ideas behind React in TypeScript
+- a virtual DOM
+- createElement
+- render
+- reconciliation
+- hooks
+- context
+- memo
 
 ## LLM Disclosure
-I generated this using Claude Opus 4.6 and gpt-5.3-codex as an experiment.
+This project is an experiment and uses code generated with both Claude Opus 4.6 and gpt-5.3-codex.
 
 ## Features
 
@@ -168,24 +175,24 @@ image requests blocked.
 
 ### Bundle Size Snapshot
 
-The values below are from a local run on February 14, 2026.
+The values below are from a local run on February 15, 2026.
 
 | Framework                  | JS bundle (raw) | JS bundle (gzip) |
 |---------------------------|----------------:|-----------------:|
-| Refract (`core`)          | 7.44 kB         | 2.91 kB          |
-| Refract (`core+hooks`)    | 8.74 kB         | 3.36 kB          |
-| Refract (`core+context`)  | 7.92 kB         | 3.14 kB          |
-| Refract (`core+memo`)     | 8.07 kB         | 3.14 kB          |
-| Refract (`core+security`) | 8.49 kB         | 3.27 kB          |
-| Refract (`refract`)       | 13.55 kB        | 5.01 kB          |
+| Refract (`core`)          | 7.46 kB         | 2.93 kB          |
+| Refract (`core+hooks`)    | 8.75 kB         | 3.38 kB          |
+| Refract (`core+context`)  | 7.94 kB         | 3.15 kB          |
+| Refract (`core+memo`)     | 8.09 kB         | 3.15 kB          |
+| Refract (`core+security`) | 8.51 kB         | 3.29 kB          |
+| Refract (`refract`)       | 13.55 kB        | 5.04 kB          |
 | React                     | 189.74 kB       | 59.52 kB         |
 | Preact                    | 14.46 kB        | 5.95 kB          |
 
 Load-time metrics are machine-dependent, so the benchmark script prints a fresh
 per-run timing table (median, p95, min/max, sd) for every framework.
 
-From this snapshot, Refract `core` gzip JS is about 20.5x smaller than React,
-and the full `refract` entrypoint is about 11.9x smaller.
+From this snapshot, Refract `core` gzip JS is about 20.3x smaller than React,
+and the full `refract` entrypoint is about 11.8x smaller.
 
 ### Component Combination Benchmarks (Vitest)
 
@@ -195,16 +202,16 @@ Higher `hz` is better.
 
 | Component usage profile | Mount (hz) | Mount vs base | Reconcile (hz) | Reconcile vs base |
 |-------------------------|------------|---------------|----------------|-------------------|
-| `base` | 5106.18 | baseline | 4318.36 | baseline |
-| `memo` | 5859.77 | +14.8% | 3980.85 | -7.8% |
-| `context` | 3555.39 | -30.4% | 5134.53 | +18.9% |
-| `fragment` | 4894.97 | -4.1% | 4122.51 | -4.5% |
-| `keyed` | 5856.46 | +14.7% | 4698.69 | +8.8% |
-| `memo+context` | 6048.46 | +18.4% | 5218.68 | +20.8% |
-| `memo+context+keyed` | 5640.31 | +10.5% | 4682.63 | +8.4% |
+| `base` | 5209.15 | baseline | 4432.98 | baseline |
+| `memo` | 5924.46 | +13.7% | 5367.20 | +21.1% |
+| `context` | 3457.71 | -33.6% | 5243.29 | +18.3% |
+| `fragment` | 5189.17 | -0.4% | 3964.90 | -10.6% |
+| `keyed` | 6084.45 | +16.8% | 5037.30 | +13.6% |
+| `memo+context` | 6113.94 | +17.4% | 5347.56 | +20.6% |
+| `memo+context+keyed` | 6040.74 | +16.0% | 5088.81 | +14.8% |
 
 In this run, `memo+context` was the fastest mount profile, while
-`memo+context` was also the fastest reconcile profile.
+`memo` was the fastest reconcile profile.
 
 ### Running the Benchmark
 

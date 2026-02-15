@@ -2,6 +2,15 @@ import type { Fiber } from "../types.js";
 import { registerComponentBailoutHandler } from "../runtimeExtensions.js";
 import { isMemoComponent, type MemoComponent } from "../memoMarker.js";
 
+let registered = false;
+
+export function ensureMemoRuntime(): void {
+  if (!registered) {
+    registered = true;
+    registerComponentBailoutHandler(memoBailoutHandler);
+  }
+}
+
 function memoBailoutHandler(fiber: Fiber): boolean {
   if (!isMemoComponent(fiber.type)) return false;
   if (!fiber.alternate) return false;
@@ -22,5 +31,3 @@ function memoBailoutHandler(fiber: Fiber): boolean {
   }
   return true;
 }
-
-registerComponentBailoutHandler(memoBailoutHandler);
