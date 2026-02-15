@@ -143,60 +143,55 @@ function snapshotProps(props: Props): Record<string, unknown> {
 }
 
 function serializeValue(value: unknown, seen: WeakSet<object>, depth: number): unknown {
-  if (
-    value == null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return value;
-  }
+  if (value == null) return value;
 
-  if (typeof value === "bigint" || typeof value === "symbol") {
-    return String(value);
-  }
-
-  if (typeof value === "function") {
-    const name = value.name || "anonymous";
-    return `[function ${name}]`;
-  }
-
-  if (typeof Node !== "undefined" && value instanceof Node) {
-    return `[node ${describeNode(value) ?? value.nodeName.toLowerCase()}]`;
-  }
-
-  if (depth >= 2) {
-    return Array.isArray(value) ? "[array]" : "[object]";
-  }
-
-  if (value instanceof Date) return value.toISOString();
-  if (value instanceof RegExp) return String(value);
-
-  if (typeof value === "object") {
-    if (seen.has(value)) return "[circular]";
-    seen.add(value);
-
-    if (Array.isArray(value)) {
-      const items = value.slice(0, 10).map((item) => serializeValue(item, seen, depth + 1));
-      if (value.length > 10) {
-        items.push(`[+${value.length - 10} more items]`);
+  switch (typeof value) {
+    case "string":
+    case "number":
+    case "boolean":
+      return value;
+    case "bigint":
+    case "symbol":
+      return String(value);
+    case "function": {
+      const name = value.name || "anonymous";
+      return `[function ${name}]`;
+    }
+    case "object": {
+      if (typeof Node !== "undefined" && value instanceof Node) {
+        return `[node ${describeNode(value) ?? value.nodeName.toLowerCase()}]`;
       }
-      return items;
-    }
+      if (depth >= 2) {
+        return Array.isArray(value) ? "[array]" : "[object]";
+      }
+      if (value instanceof Date) return value.toISOString();
+      if (value instanceof RegExp) return String(value);
 
-    const record = value as Record<string, unknown>;
-    const entries = Object.entries(record);
-    const out: Record<string, unknown> = {};
-    for (const [key, entryValue] of entries.slice(0, 10)) {
-      out[key] = serializeValue(entryValue, seen, depth + 1);
+      if (seen.has(value)) return "[circular]";
+      seen.add(value);
+
+      if (Array.isArray(value)) {
+        const items = value.slice(0, 10).map((item) => serializeValue(item, seen, depth + 1));
+        if (value.length > 10) {
+          items.push(`[+${value.length - 10} more items]`);
+        }
+        return items;
+      }
+
+      const record = value as Record<string, unknown>;
+      const entries = Object.entries(record);
+      const out: Record<string, unknown> = {};
+      for (const [key, entryValue] of entries.slice(0, 10)) {
+        out[key] = serializeValue(entryValue, seen, depth + 1);
+      }
+      if (entries.length > 10) {
+        out.__truncated = `${entries.length - 10} more keys`;
+      }
+      return out;
     }
-    if (entries.length > 10) {
-      out.__truncated = `${entries.length - 10} more keys`;
-    }
-    return out;
+    default:
+      return String(value);
   }
-
-  return String(value);
 }
 
 function describeFiberType(fiber: Fiber): string {

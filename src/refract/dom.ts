@@ -72,43 +72,51 @@ export function applyProps(
     if (key === "children" || key === "key" || key === "ref") continue;
     if (oldProps[key] === newProps[key]) continue;
 
-    if (key === "dangerouslySetInnerHTML") {
-      const raw = (newProps[key] as { __html?: unknown } | undefined)?.__html;
-      if (typeof raw !== "string") {
-        throw new TypeError("dangerouslySetInnerHTML expects a string __html value");
+    switch (key) {
+      case "dangerouslySetInnerHTML": {
+        const raw = (newProps[key] as { __html?: unknown } | undefined)?.__html;
+        if (typeof raw !== "string") {
+          throw new TypeError("dangerouslySetInnerHTML expects a string __html value");
+        }
+        el.innerHTML = htmlSanitizer(raw);
+        break;
       }
-      el.innerHTML = htmlSanitizer(raw);
-    } else if (key.startsWith("on")) {
-      const event = key.slice(2).toLowerCase();
-      if (oldProps[key]) {
-        el.removeEventListener(event, oldProps[key] as EventListener);
-      }
-      el.addEventListener(event, newProps[key] as EventListener);
-    } else if (key === "className") {
-      el.setAttribute("class", newProps[key] as string);
-    } else if (key === "style") {
-      if (typeof newProps[key] === "object" && newProps[key] !== null) {
-        const prevStyles = (typeof oldProps[key] === "object" && oldProps[key] !== null)
-          ? oldProps[key] as Record<string, unknown>
-          : {};
-        const styles = newProps[key] as Record<string, unknown>;
-        for (const prop of Object.keys(prevStyles)) {
-          if (!(prop in styles)) {
-            (el.style as unknown as Record<string, string>)[prop] = "";
+      case "className":
+        el.setAttribute("class", newProps[key] as string);
+        break;
+      case "style":
+        if (typeof newProps[key] === "object" && newProps[key] !== null) {
+          const prevStyles = (typeof oldProps[key] === "object" && oldProps[key] !== null)
+            ? oldProps[key] as Record<string, unknown>
+            : {};
+          const styles = newProps[key] as Record<string, unknown>;
+          for (const prop of Object.keys(prevStyles)) {
+            if (!(prop in styles)) {
+              (el.style as unknown as Record<string, string>)[prop] = "";
+            }
           }
+          for (const [prop, val] of Object.entries(styles)) {
+            (el.style as unknown as Record<string, string>)[prop] = val == null ? "" : String(val);
+          }
+        } else {
+          el.removeAttribute("style");
         }
-        for (const [prop, val] of Object.entries(styles)) {
-          (el.style as unknown as Record<string, string>)[prop] = val == null ? "" : String(val);
+        break;
+      default:
+        if (key.startsWith("on")) {
+          const event = key.slice(2).toLowerCase();
+          if (oldProps[key]) {
+            el.removeEventListener(event, oldProps[key] as EventListener);
+          }
+          el.addEventListener(event, newProps[key] as EventListener);
+        } else {
+          if (unsafeUrlPropChecker(key, newProps[key])) {
+            el.removeAttribute(key);
+            continue;
+          }
+          el.setAttribute(key, String(newProps[key]));
         }
-      } else {
-        el.removeAttribute("style");
-      }
-    } else {
-      if (unsafeUrlPropChecker(key, newProps[key])) {
-        el.removeAttribute(key);
-        continue;
-      }
-      el.setAttribute(key, String(newProps[key]));
+        break;
     }
   }
 }
