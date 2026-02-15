@@ -41,12 +41,15 @@ build-refract-full:
 	$(YARN) vite build --config benchmark/refract-full-demo/vite.config.ts benchmark/refract-full-demo
 
 build-react:
+	$(YARN) --cwd benchmark/react-demo install --frozen-lockfile
 	$(YARN) --cwd benchmark/react-demo build
 
 build-preact:
+	$(YARN) --cwd benchmark/preact-demo install --frozen-lockfile
 	$(YARN) --cwd benchmark/preact-demo build
 
 benchmark: build
+	$(YARN) --cwd benchmark install --frozen-lockfile
 	$(YARN) --cwd benchmark bench
 
 bench: benchmark
