@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/lens-syntax-refract.svg" alt="Refract logo" width="200" />
+</p>
+
 # Refract
 
 A minimal React-like virtual DOM library, written in TypeScript with split entrypoints

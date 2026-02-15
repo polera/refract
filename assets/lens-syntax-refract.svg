@@ -1,0 +1,32 @@
+<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#00d2ff" />
+            <stop offset="100%" stop-color="#00ff99" />
+        </linearGradient>
+    </defs>
+
+    <!-- Large Outer Brackets (Pulled in) -->
+    <path d="M25 15L15 25V75L25 85" stroke="#444" stroke-width="2" fill="none"/>
+    <path d="M75 15L85 25V75L75 85" stroke="#444" stroke-width="2" fill="none"/>
+    
+    <!-- Connection Lines (Adjusted for narrower width) -->
+    <path d="M28 45H35" stroke="#333" stroke-width="1.5"/>
+    <path d="M72 45H65" stroke="#333" stroke-width="1.5"/>
+    
+    <!-- Lens/Focus Circle -->
+    <circle cx="50" cy="45" r="18" stroke="#333" stroke-width="1"/>
+    
+    <!-- Small Inner Brackets (The Core) -->
+    <path d="M45 37L42 40V50L45 53" stroke="#00d2ff" stroke-width="2" fill="none"/>
+    <path d="M55 37L58 40V50L55 53" stroke="#00ff99" stroke-width="2" fill="none"/>
+    
+    <!-- Text (Smaller and tighter) -->
+    <text x="50" y="78" 
+          font-family="system-ui, -apple-system, sans-serif" 
+          font-size="8" 
+          font-weight="700" 
+          letter-spacing="2" 
+          fill="url(#textGradient)" 
+          text-anchor="middle">REFRACT</text>
+</svg>
