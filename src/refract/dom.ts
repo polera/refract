@@ -13,6 +13,8 @@ export type UnsafeUrlPropChecker = (key: string, value: unknown) => boolean;
 
 let htmlSanitizer: HtmlSanitizer = identitySanitizer;
 let unsafeUrlPropChecker: UnsafeUrlPropChecker = () => false;
+let reactCompatEventMode = false;
+const reactCompatWrappers = new WeakMap<EventListener, EventListener>();
 
 export function setHtmlSanitizer(sanitizer: HtmlSanitizer | null): void {
   htmlSanitizer = sanitizer ?? identitySanitizer;
@@ -22,8 +24,44 @@ export function setUnsafeUrlPropChecker(checker: UnsafeUrlPropChecker | null): v
   unsafeUrlPropChecker = checker ?? (() => false);
 }
 
+export function setReactCompatEventMode(enabled: boolean): void {
+  reactCompatEventMode = enabled;
+}
+
 function identitySanitizer(html: string): string {
   return html;
+}
+
+function getEventListener(handler: unknown): EventListener {
+  if (typeof handler !== "function") {
+    return handler as EventListener;
+  }
+  if (!reactCompatEventMode) {
+    return handler as EventListener;
+  }
+
+  const typedHandler = handler as EventListener;
+  const existing = reactCompatWrappers.get(typedHandler);
+  if (existing) return existing;
+
+  const wrapped: EventListener = (event: Event) => {
+    const eventRecord = event as unknown as Record<string, unknown>;
+    if (!("nativeEvent" in eventRecord)) {
+      try {
+        Object.defineProperty(event, "nativeEvent", {
+          configurable: true,
+          enumerable: false,
+          value: event,
+          writable: false,
+        });
+      } catch {
+        // ignore if event object is non-extensible
+      }
+    }
+    typedHandler(event);
+  };
+  reactCompatWrappers.set(typedHandler, wrapped);
+  return wrapped;
 }
 
 /** Create a real DOM node from a fiber */
@@ -61,7 +99,7 @@ export function applyProps(
     if (key === "children" || key === "key" || key === "ref") continue;
     if (!(key in newProps)) {
       if (key.startsWith("on")) {
-        el.removeEventListener(key.slice(2).toLowerCase(), oldProps[key] as EventListener);
+        el.removeEventListener(key.slice(2).toLowerCase(), getEventListener(oldProps[key]));
       } else {
         el.removeAttribute(key);
       }
@@ -106,9 +144,9 @@ export function applyProps(
         if (key.startsWith("on")) {
           const event = key.slice(2).toLowerCase();
           if (oldProps[key]) {
-            el.removeEventListener(event, oldProps[key] as EventListener);
+            el.removeEventListener(event, getEventListener(oldProps[key]));
           }
-          el.addEventListener(event, newProps[key] as EventListener);
+          el.addEventListener(event, getEventListener(newProps[key]));
         } else {
           if (unsafeUrlPropChecker(key, newProps[key])) {
             el.removeAttribute(key);

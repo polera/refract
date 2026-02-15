@@ -12,7 +12,12 @@
     "./context": "./src/refract/features/context.ts",
     "./memo": "./src/refract/memo.ts",
     "./security": "./src/refract/features/security.ts",
-    "./devtools": "./src/refract/devtools.ts"
+    "./devtools": "./src/refract/devtools.ts",
+    "./compat/react": "./src/refract/compat/react.ts",
+    "./compat/react-dom": "./src/refract/compat/react-dom.ts",
+    "./compat/react-dom/client": "./src/refract/compat/react-dom-client.ts",
+    "./compat/react/jsx-runtime": "./src/refract/compat/react-jsx-runtime.ts",
+    "./compat/react/jsx-dev-runtime": "./src/refract/compat/react-jsx-dev-runtime.ts"
   },
   "scripts": {
     "dev": "vite demo",
@@ -25,6 +30,9 @@
   "devDependencies": {
     "@types/jsdom": "^27.0.0",
     "jsdom": "^28.0.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vitest": "^4.0.18"

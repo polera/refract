@@ -7,13 +7,25 @@ import {
 } from "./runtimeExtensions.js";
 
 const fibersWithPendingEffects = new Set<Fiber>();
+const fibersWithPendingLayoutEffects = new Set<Fiber>();
+const fibersWithPendingInsertionEffects = new Set<Fiber>();
 
 export function markPendingEffects(fiber: Fiber): void {
   fibersWithPendingEffects.add(fiber);
 }
 
+export function markPendingLayoutEffects(fiber: Fiber): void {
+  fibersWithPendingLayoutEffects.add(fiber);
+}
+
+export function markPendingInsertionEffects(fiber: Fiber): void {
+  fibersWithPendingInsertionEffects.add(fiber);
+}
+
 function cleanupFiberEffects(fiber: Fiber): void {
   fibersWithPendingEffects.delete(fiber);
+  fibersWithPendingLayoutEffects.delete(fiber);
+  fibersWithPendingInsertionEffects.delete(fiber);
   if (!fiber.hooks) return;
 
   for (const hook of fiber.hooks) {
@@ -25,8 +37,8 @@ function cleanupFiberEffects(fiber: Fiber): void {
   }
 }
 
-function runPendingEffects(): void {
-  for (const fiber of fibersWithPendingEffects) {
+function runPendingEffectsFor(fibers: Set<Fiber>): void {
+  for (const fiber of fibers) {
     if (!fiber.hooks) continue;
 
     for (const hook of fiber.hooks) {
@@ -42,7 +54,14 @@ function runPendingEffects(): void {
       }
     }
   }
-  fibersWithPendingEffects.clear();
+  fibers.clear();
+}
+
+function runPendingEffects(): void {
+  // run in insertion -> layout -> passive order
+  runPendingEffectsFor(fibersWithPendingInsertionEffects);
+  runPendingEffectsFor(fibersWithPendingLayoutEffects);
+  runPendingEffectsFor(fibersWithPendingEffects);
 }
 
 function handleErrorBoundary(fiber: Fiber, error: unknown): boolean {

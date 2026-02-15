@@ -127,7 +127,7 @@ describe("keyed reconciliation", () => {
 
     // Reverse order (simulates shuffle)
     setItems(["C", "B", "A"]);
-    await new Promise((r) => queueMicrotask(r));
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
 
     expect(gallery.children).toHaveLength(3);
     expect(gallery.children[0].textContent).toBe("C");

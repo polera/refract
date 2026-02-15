@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 import { createElement, render } from "../src/refract/core.js";
 import { useState } from "../src/refract/features/hooks.js";
 import type { Props } from "../src/refract/types.js";

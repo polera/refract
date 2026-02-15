@@ -82,6 +82,44 @@ yarn test
 - `refract/full` -- complete API including hooks, context, memo, sanitizer defaults, and devtools integration
 - `refract` -- alias of `refract/full` for backward compatibility
 - Feature entrypoints for custom bundles: `refract/hooks`, `refract/context`, `refract/memo`, `refract/security`, `refract/devtools`
+- Optional React-compat entrypoints (opt-in): `refract/compat/react`, `refract/compat/react-dom`, `refract/compat/react-dom/client`, `refract/compat/react/jsx-runtime`, `refract/compat/react/jsx-dev-runtime`
+
+### React Ecosystem Compatibility (Opt-in)
+
+Refract now includes an opt-in compatibility layer so you can alias React imports
+for selected ecosystem libraries (for example MUI, `react-router-dom`, and
+`@dnd-kit`) without inflating the default `refract/core` path.
+
+Supported compat APIs include:
+- `forwardRef`, `cloneElement`, `Children`, `isValidElement`
+- `useLayoutEffect`, `useInsertionEffect`, `useId`
+- `useSyncExternalStore`, `useImperativeHandle`
+- `createPortal`
+- `createRoot`, `flushSync`, `unstable_batchedUpdates`
+- `jsx/jsxs/jsxDEV` runtime entrypoints
+- React hook dispatcher bridge internals (`__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE`) with optional `registerExternalReactModule(...)` for mixed-runtime environments (tests/Node)
+
+Example Vite aliases:
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      react: "refract/compat/react",
+      "react-dom": "refract/compat/react-dom",
+      "react-dom/client": "refract/compat/react-dom/client",
+      "react/jsx-runtime": "refract/compat/react/jsx-runtime",
+      "react/jsx-dev-runtime": "refract/compat/react/jsx-dev-runtime",
+    },
+  },
+});
+```
+
+The compat layer is intentionally separate from core so users who do not need
+React ecosystem compatibility keep the smallest and fastest Refract bundles.
 
 ## API
 
@@ -181,20 +219,20 @@ The values below are from a local run on February 15, 2026.
 
 | Framework                  | JS bundle (raw) | JS bundle (gzip) |
 |---------------------------|----------------:|-----------------:|
-| Refract (`core`)          | 7.46 kB         | 2.93 kB          |
-| Refract (`core+hooks`)    | 8.75 kB         | 3.38 kB          |
-| Refract (`core+context`)  | 7.94 kB         | 3.15 kB          |
-| Refract (`core+memo`)     | 8.09 kB         | 3.15 kB          |
-| Refract (`core+security`) | 8.51 kB         | 3.29 kB          |
-| Refract (`refract`)       | 13.55 kB        | 5.04 kB          |
+| Refract (`core`)          | 8.36 kB         | 3.16 kB          |
+| Refract (`core+hooks`)    | 9.76 kB         | 3.65 kB          |
+| Refract (`core+context`)  | 8.85 kB         | 3.38 kB          |
+| Refract (`core+memo`)     | 9.03 kB         | 3.39 kB          |
+| Refract (`core+security`) | 9.27 kB         | 3.46 kB          |
+| Refract (`refract`)       | 14.64 kB        | 5.34 kB          |
 | React                     | 189.74 kB       | 59.52 kB         |
 | Preact                    | 14.46 kB        | 5.95 kB          |
 
 Load-time metrics are machine-dependent, so the benchmark script prints a fresh
 per-run timing table (median, p95, min/max, sd) for every framework.
 
-From this snapshot, Refract `core` gzip JS is about 20.3x smaller than React,
-and the full `refract` entrypoint is about 11.8x smaller.
+From this snapshot, Refract `core` gzip JS is about 18.8x smaller than React,
+and the full `refract` entrypoint is about 11.1x smaller.
 
 ### Component Combination Benchmarks (Vitest)
 
@@ -204,13 +242,13 @@ Higher `hz` is better.
 
 | Component usage profile | Mount (hz) | Mount vs base | Reconcile (hz) | Reconcile vs base |
 |-------------------------|------------|---------------|----------------|-------------------|
-| `base` | 5209.15 | baseline | 4432.98 | baseline |
-| `memo` | 5924.46 | +13.7% | 5367.20 | +21.1% |
-| `context` | 3457.71 | -33.6% | 5243.29 | +18.3% |
-| `fragment` | 5189.17 | -0.4% | 3964.90 | -10.6% |
-| `keyed` | 6084.45 | +16.8% | 5037.30 | +13.6% |
-| `memo+context` | 6113.94 | +17.4% | 5347.56 | +20.6% |
-| `memo+context+keyed` | 6040.74 | +16.0% | 5088.81 | +14.8% |
+| `base` | 5068.40 | baseline | 4144.37 | baseline |
+| `memo` | 5883.23 | +16.1% | 5154.56 | +24.4% |
+| `context` | 3521.54 | -30.5% | 5063.92 | +22.2% |
+| `fragment` | 4880.23 | -3.7% | 4079.08 | -1.6% |
+| `keyed` | 5763.70 | +13.7% | 4844.23 | +16.9% |
+| `memo+context` | 6173.01 | +21.8% | 5144.98 | +24.1% |
+| `memo+context+keyed` | 5606.73 | +10.6% | 4732.23 | +14.2% |
 
 In this run, `memo+context` was the fastest mount profile, while
 `memo` was the fastest reconcile profile.
