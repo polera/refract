@@ -1,5 +1,5 @@
 {
-  "name": "refract",
+  "name": "@ipxjs/refract",
   "version": "0.1.0",
   "description": "A minimal React-like virtual DOM library focused on image rendering",
   "type": "module",

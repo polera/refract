@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="assets/lens-syntax-refract.svg" alt="Refract logo" width="200" />
-</p>
+![](assets/lens-syntax-refract.svg "=x200")
 
 # Refract
 
