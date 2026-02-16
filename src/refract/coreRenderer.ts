@@ -17,6 +17,9 @@ import {
 /** Module globals for hook system */
 export let currentFiber: Fiber | null = null;
 
+/** True while performWork() is executing (render phase) */
+export let isRendering = false;
+
 /** Store root fiber per container */
 const roots = new WeakMap<Node, Fiber>();
 let deletions: Fiber[] = [];
@@ -43,7 +46,9 @@ export function renderFiber(vnode: VNode, container: Node): void {
     flags: UPDATE,
   };
   deletions = [];
+  isRendering = true;
   performWork(rootFiber);
+  isRendering = false;
   const committedDeletions = deletions.slice();
   commitRoot(rootFiber);
   runAfterCommitHandlers();
@@ -51,15 +56,16 @@ export function renderFiber(vnode: VNode, container: Node): void {
   runCommitHandlers(rootFiber, committedDeletions);
 }
 
-/** Depth-first work loop: call components, diff children */
-function performWork(fiber: Fiber): void {
+/** Process a single fiber: call component, diff children.
+ *  Returns true if bailed out (children should be skipped). */
+function processWorkUnit(fiber: Fiber): boolean {
   const isComponent = typeof fiber.type === "function";
   const isFragment = fiber.type === Fragment;
   const isPortal = fiber.type === Portal;
 
   if (isComponent) {
     if (fiber.alternate && fiber.flags === UPDATE && shouldBailoutComponent(fiber)) {
-      return advanceWork(fiber);
+      return true;
     }
 
     currentFiber = fiber;
@@ -95,13 +101,35 @@ function performWork(fiber: Fiber): void {
     }
   }
 
-  // Traverse: child first, then sibling, then uncle
-  if (fiber.child) {
-    performWork(fiber.child);
-    return;
-  }
+  return false;
+}
 
-  advanceWork(fiber);
+/** Iterative depth-first work loop (avoids stack overflow on deep trees) */
+function performWork(rootFiber: Fiber): void {
+  let fiber: Fiber | null = rootFiber;
+
+  while (fiber) {
+    const bailedOut = processWorkUnit(fiber);
+
+    // Descend to child unless bailed out
+    if (!bailedOut && fiber.child) {
+      fiber = fiber.child;
+      continue;
+    }
+
+    // No child or bailed out — walk up to find next sibling
+    if (fiber === rootFiber) break;
+    while (fiber) {
+      if (fiber.sibling) {
+        fiber = fiber.sibling;
+        break;
+      }
+      fiber = fiber.parent;
+      if (!fiber || fiber === rootFiber) {
+        fiber = null;
+      }
+    }
+  }
 }
 
 type RenderedChild = VNode | string | number | boolean | null | undefined | RenderedChild[];
@@ -137,17 +165,6 @@ function flattenRenderedChildren(raw: RenderedChild[]): VNode[] {
 
 function isPortalFiber(fiber: Fiber): boolean {
   return fiber.type === Portal;
-}
-
-function advanceWork(fiber: Fiber): void {
-  let next: Fiber | null = fiber;
-  while (next) {
-    if (next.sibling) {
-      performWork(next.sibling);
-      return;
-    }
-    next = next.parent;
-  }
 }
 
 /** Find the next DOM sibling for insertion (skips siblings being placed/moved) */
@@ -266,9 +283,15 @@ function commitWork(fiber: Fiber): void {
     }
   }
 
-  // Handle ref prop
+  // Handle ref prop — only on mount or when ref changes (like React)
   if (fiber.dom && fiber.props.ref) {
-    setRef(fiber.props.ref, fiber.dom);
+    const oldRef = fiber.alternate?.props.ref;
+    if (fiber.flags & PLACEMENT || fiber.props.ref !== oldRef) {
+      if (oldRef && oldRef !== fiber.props.ref) {
+        setRef(oldRef, null);
+      }
+      setRef(fiber.props.ref, fiber.dom);
+    }
   }
 
   fiber.flags = 0;
@@ -331,11 +354,28 @@ export function scheduleRender(fiber: Fiber): void {
   }
 }
 
+const MAX_NESTED_RENDERS = 50;
+const renderCounts = new Map<Node, number>();
+
 function flushRenders(): void {
   flushScheduled = false;
-  for (const container of pendingContainers) {
+  // Snapshot and clear pendingContainers BEFORE processing,
+  // so effects that call scheduleRender during commit add to a fresh set.
+  const containers = [...pendingContainers];
+  pendingContainers.clear();
+  for (const container of containers) {
     const currentRoot = roots.get(container);
     if (!currentRoot) continue;
+
+    // Re-render guard: detect infinite loops (matches React's limit of 50)
+    const count = (renderCounts.get(container) ?? 0) + 1;
+    if (count > MAX_NESTED_RENDERS) {
+      renderCounts.delete(container);
+      throw new Error(
+        "Too many re-renders. Refract limits the number of renders to prevent an infinite loop.",
+      );
+    }
+    renderCounts.set(container, count);
 
     const newRoot: Fiber = {
       type: currentRoot.type,
@@ -351,14 +391,20 @@ function flushRenders(): void {
       flags: UPDATE,
     };
     deletions = [];
+    isRendering = true;
     performWork(newRoot);
+    isRendering = false;
     const committedDeletions = deletions.slice();
     commitRoot(newRoot);
     runAfterCommitHandlers();
     roots.set(container, newRoot);
     runCommitHandlers(newRoot, committedDeletions);
   }
-  pendingContainers.clear();
+
+  // Reset counters when no more pending renders (loop resolved)
+  if (pendingContainers.size === 0) {
+    renderCounts.clear();
+  }
 }
 
 export function flushPendingRenders(): void {

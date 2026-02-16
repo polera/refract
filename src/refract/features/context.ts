@@ -20,7 +20,11 @@ export function createContext<T>(defaultValue: T): Context<T> {
     fiber._contexts.set(id, props.value);
 
     const children = props.children ?? [];
-    return children.length === 1 ? children[0] : createElement(Fragment, null, ...children);
+    if (Array.isArray(children)) {
+      return children.length === 1 ? children[0] : createElement(Fragment, null, ...children);
+    }
+    // Single child (React compat: children may be a VNode, not an array)
+    return children;
   };
 
   return { Provider, _id: id, _defaultValue: defaultValue };
