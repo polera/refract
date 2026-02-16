@@ -1,5 +1,5 @@
 import type { Hook } from "../types.js";
-import { currentFiber, isRendering, scheduleRender } from "../coreRenderer.js";
+import { currentFiber, scheduleRender } from "../coreRenderer.js";
 import { markPendingEffects, markPendingInsertionEffects, markPendingLayoutEffects } from "../hooksRuntime.js";
 
 function getHook(): Hook {
@@ -39,14 +39,7 @@ export function useState<T>(initial: T | (() => T)): [T, (value: T | ((prev: T) 
       const action = typeof value === "function"
         ? value as (prev: T) => T
         : () => value;
-      // Bail out if the new state is the same as the current state
-      const nextState = action(hook.state as T);
-      if (Object.is(nextState, hook.state)) return;
-      (hook.queue as ((prev: T) => T)[]).push(() => nextState);
-      // During render phase, queue the update but don't schedule an async
-      // re-render — the update will be picked up on the next render pass
-      // (matches React's setState-during-render behavior)
-      if (isRendering) return;
+      (hook.queue as ((prev: T) => T)[]).push(action);
       scheduleRender(hook._fiber!);
     };
   }
@@ -195,10 +188,7 @@ export function useReducer<S, A, I>(
   // Create stable dispatch (like React)
   if (!hook._dispatch) {
     hook._dispatch = (action: A) => {
-      const nextState = (hook._reducer as typeof reducer)(hook.state as S, action);
-      if (Object.is(nextState, hook.state)) return;
       (hook.queue as A[]).push(action);
-      if (isRendering) return; // setState-during-render: skip scheduleRender
       scheduleRender(hook._fiber!);
     };
   }
