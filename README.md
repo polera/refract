@@ -215,24 +215,24 @@ image requests blocked.
 
 ### Bundle Size Snapshot
 
-The values below are from a local run on February 15, 2026.
+The values below are from a local run on February 16, 2026.
 
 | Framework                  | JS bundle (raw) | JS bundle (gzip) |
 |---------------------------|----------------:|-----------------:|
-| Refract (`core`)          | 8.36 kB         | 3.16 kB          |
-| Refract (`core+hooks`)    | 9.76 kB         | 3.65 kB          |
-| Refract (`core+context`)  | 8.85 kB         | 3.38 kB          |
-| Refract (`core+memo`)     | 9.03 kB         | 3.39 kB          |
-| Refract (`core+security`) | 9.27 kB         | 3.46 kB          |
-| Refract (`refract`)       | 14.64 kB        | 5.34 kB          |
+| Refract (`core`)          | 8.62 kB         | 3.24 kB          |
+| Refract (`core+hooks`)    | 10.28 kB        | 3.85 kB          |
+| Refract (`core+context`)  | 9.12 kB         | 3.47 kB          |
+| Refract (`core+memo`)     | 9.29 kB         | 3.48 kB          |
+| Refract (`core+security`) | 9.53 kB         | 3.54 kB          |
+| Refract (`refract`)       | 15.20 kB        | 5.55 kB          |
 | React                     | 189.74 kB       | 59.52 kB         |
 | Preact                    | 14.46 kB        | 5.95 kB          |
 
 Load-time metrics are machine-dependent, so the benchmark script prints a fresh
 per-run timing table (median, p95, min/max, sd) for every framework.
 
-From this snapshot, Refract `core` gzip JS is about 18.8x smaller than React,
-and the full `refract` entrypoint is about 11.1x smaller.
+From this snapshot, Refract `core` gzip JS is about 18.4x smaller than React,
+and the full `refract` entrypoint is about 10.7x smaller.
 
 ### Component Combination Benchmarks (Vitest)
 
@@ -242,16 +242,16 @@ Higher `hz` is better.
 
 | Component usage profile | Mount (hz) | Mount vs base | Reconcile (hz) | Reconcile vs base |
 |-------------------------|------------|---------------|----------------|-------------------|
-| `base` | 5068.40 | baseline | 4144.37 | baseline |
-| `memo` | 5883.23 | +16.1% | 5154.56 | +24.4% |
-| `context` | 3521.54 | -30.5% | 5063.92 | +22.2% |
-| `fragment` | 4880.23 | -3.7% | 4079.08 | -1.6% |
-| `keyed` | 5763.70 | +13.7% | 4844.23 | +16.9% |
-| `memo+context` | 6173.01 | +21.8% | 5144.98 | +24.1% |
-| `memo+context+keyed` | 5606.73 | +10.6% | 4732.23 | +14.2% |
+| `base` | 5341.47 | baseline | 3932.98 | baseline |
+| `memo` | 5821.44 | +9.0% | 5202.62 | +32.3% |
+| `context` | 3960.70 | -25.9% | 5108.06 | +29.9% |
+| `fragment` | 4739.90 | -11.3% | 4114.70 | +4.6% |
+| `keyed` | 6008.81 | +12.5% | 4816.85 | +22.5% |
+| `memo+context` | 5670.29 | +6.2% | 5231.58 | +33.0% |
+| `memo+context+keyed` | 5813.60 | +8.8% | 4606.91 | +17.1% |
 
-In this run, `memo+context` was the fastest mount profile, while
-`memo` was the fastest reconcile profile.
+In this run, `keyed` was the fastest mount profile, while
+`memo+context` was the fastest reconcile profile.
 
 ### Running the Benchmark
 
@@ -301,24 +301,27 @@ How Refract compares to React and Preact:
 | **Hooks**                      |         |       |        |
 | useState                       | Yes     | Yes   | Yes    |
 | useEffect                      | Yes     | Yes   | Yes    |
-| useLayoutEffect                | No      | Yes   | Yes    |
+| useLayoutEffect                | Yes     | Yes   | Yes    |
+| useInsertionEffect             | Yes     | Yes   | Yes    |
 | useRef                         | Yes     | Yes   | Yes    |
 | useMemo / useCallback          | Yes     | Yes   | Yes    |
 | useReducer                     | Yes     | Yes   | Yes    |
 | useContext                     | Yes     | Yes   | Yes    |
-| useId                          | No      | Yes   | Yes    |
-| useTransition / useDeferredValue | No    | Yes   | No     |
+| useId                          | Yes     | Yes   | Yes    |
+| useSyncExternalStore           | Yes     | Yes   | Yes    |
+| useImperativeHandle            | Yes     | Yes   | Yes    |
+| useTransition / useDeferredValue | Partial⁵ | Yes | Partial⁷ |
 | **State & Data Flow**          |         |       |        |
 | Built-in state management      | Yes     | Yes   | Yes    |
 | Context API                    | Yes     | Yes   | Yes    |
 | Refs (createRef / ref prop)    | Yes     | Yes   | Yes    |
-| forwardRef                     | No      | Yes   | Yes    |
+| forwardRef                     | Yes⁶    | Yes   | Yes    |
 | **Rendering**                  |         |       |        |
 | Event handling                 | Yes     | Yes   | Yes    |
 | Style objects                  | Yes     | Yes   | Yes    |
 | className prop                 | Yes     | Yes   | Yes¹   |
 | dangerouslySetInnerHTML        | Yes     | Yes   | Yes    |
-| Portals                        | No      | Yes   | Yes    |
+| Portals                        | Yes     | Yes   | Yes    |
 | Suspense / lazy                | No      | Yes   | Yes²   |
 | Error boundaries               | Yes³    | Yes   | Yes    |
 | Server-side rendering          | No      | Yes   | Yes    |
@@ -333,13 +336,16 @@ How Refract compares to React and Preact:
 | memo / PureComponent           | Yes     | Yes   | Yes    |
 | **Ecosystem**                  |         |       |        |
 | DevTools                       | Basic (hook API) | Yes   | Yes    |
-| React compatibility layer      | N/A     | N/A   | Yes    |
-| **Bundle Size (gzip, JS)**     | ~2.9-5.0 kB⁴ | ~59.5 kB | ~6.0 kB |
+| React compatibility layer      | Yes⁶    | N/A   | Yes⁷   |
+| **Bundle Size (gzip, JS)**     | ~3.2-5.6 kB⁴ | ~59.5 kB | ~6.0 kB |
 
 ¹ Preact supports both `class` and `className`.
 ² Preact has partial Suspense support via `preact/compat`.
 ³ Refract uses the `useErrorBoundary` hook rather than class-based error boundaries.
 ⁴ Refract size depends on entrypoint (`refract/core` vs `refract` full).
+⁵ Refract exposes `useTransition` / `useDeferredValue` but currently runs both synchronously (no concurrent scheduling).
+⁶ Available via opt-in compat entrypoints (`refract/compat/react*`).
+⁷ Preact compatibility is provided through `preact/compat`.
 
 ## License
 
