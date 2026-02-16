@@ -1,5 +1,5 @@
 import type { Hook } from "../types.js";
-import { currentFiber, scheduleRender } from "../coreRenderer.js";
+import { currentFiber, isRendering, scheduleRender } from "../coreRenderer.js";
 import { markPendingEffects, markPendingInsertionEffects, markPendingLayoutEffects } from "../hooksRuntime.js";
 
 function getHook(): Hook {
@@ -33,15 +33,28 @@ export function useState<T>(initial: T | (() => T)): [T, (value: T | ((prev: T) 
   }
   hook.queue = [];
 
-  const setState = (value: T | ((prev: T) => T)) => {
-    const action = typeof value === "function"
-      ? value as (prev: T) => T
-      : () => value;
-    (hook.queue as ((prev: T) => T)[]).push(action);
-    scheduleRender(fiber);
-  };
+  // Create a stable setter that is reused across renders (like React)
+  if (!hook._setter) {
+    hook._setter = (value: T | ((prev: T) => T)) => {
+      const action = typeof value === "function"
+        ? value as (prev: T) => T
+        : () => value;
+      // Bail out if the new state is the same as the current state
+      const nextState = action(hook.state as T);
+      if (Object.is(nextState, hook.state)) return;
+      (hook.queue as ((prev: T) => T)[]).push(() => nextState);
+      // During render phase, queue the update but don't schedule an async
+      // re-render — the update will be picked up on the next render pass
+      // (matches React's setState-during-render behavior)
+      if (isRendering) return;
+      scheduleRender(hook._fiber!);
+    };
+  }
+  // Update fiber reference each render so the setter always schedules
+  // against the current fiber (fibers are recreated on re-render)
+  hook._fiber = fiber;
 
-  return [hook.state as T, setState];
+  return [hook.state as T, hook._setter as (value: T | ((prev: T) => T)) => void];
 }
 
 type EffectCleanup = void | (() => void);
@@ -162,15 +175,36 @@ export function useReducer<S, A, I>(
   initialArg: S | I,
   init?: (arg: I) => S,
 ): [S, (action: A) => void] {
-  const [state, setState] = useState<S>(() => (
-    init
-      ? init(initialArg as I)
-      : initialArg as S
-  ));
-  const dispatch = (action: A) => {
-    setState((prev) => reducer(prev, action));
-  };
-  return [state, dispatch];
+  const hook = getHook();
+  const fiber = currentFiber!;
+
+  if (hook.queue === undefined) {
+    hook.state = init ? init(initialArg as I) : initialArg as S;
+    hook.queue = [];
+  }
+
+  // Process queued actions
+  for (const action of hook.queue as A[]) {
+    hook.state = reducer(hook.state as S, action);
+  }
+  hook.queue = [];
+
+  // Store current reducer ref (may change between renders)
+  hook._reducer = reducer;
+
+  // Create stable dispatch (like React)
+  if (!hook._dispatch) {
+    hook._dispatch = (action: A) => {
+      const nextState = (hook._reducer as typeof reducer)(hook.state as S, action);
+      if (Object.is(nextState, hook.state)) return;
+      (hook.queue as A[]).push(action);
+      if (isRendering) return; // setState-during-render: skip scheduleRender
+      scheduleRender(hook._fiber!);
+    };
+  }
+  hook._fiber = fiber;
+
+  return [hook.state as S, hook._dispatch as (action: A) => void];
 }
 
 export function createRef<T = unknown>(): { current: T | null } {
@@ -229,11 +263,13 @@ export function useSyncExternalStore<T>(
   getSnapshot: () => T,
   _getServerSnapshot?: () => T,
 ): T {
-  const [snapshot, setSnapshot] = useState<T>(getSnapshot());
+  // Wrap in arrow functions to prevent useState from treating function-valued
+  // snapshots (e.g. zustand selectors returning store actions) as updaters.
+  const [snapshot, setSnapshot] = useState<T>(() => getSnapshot());
 
   useEffect(() => {
     const handleStoreChange = () => {
-      setSnapshot(getSnapshot());
+      setSnapshot(() => getSnapshot());
     };
     const unsubscribe = subscribe(handleStoreChange);
     handleStoreChange();

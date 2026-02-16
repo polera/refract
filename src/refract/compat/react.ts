@@ -36,6 +36,7 @@ export function forwardRef<T, P extends Record<string, unknown> = Record<string,
     const { ref, ...rest } = props as Props & { ref?: { current: T | null } | ((value: T | null) => void) | null };
     return render(rest as unknown as P, ref ?? null);
   };
+  (ForwardRefComponent as any).displayName = `ForwardRef(${(render as any).name || 'anonymous'})`;
   return ForwardRefComponent;
 }
 
@@ -69,7 +70,13 @@ export function cloneElement(
   const nextChildren = normalizeChildren(mergedProps.children);
   delete mergedProps.children;
 
-  return createElement(element.type, mergedProps, ...(nextChildren as ElementChild[]));
+  const vnode = createElement(element.type, mergedProps, ...(nextChildren as ElementChild[]));
+  // React compat: single child should not be wrapped in array
+  const c = vnode.props.children;
+  if (Array.isArray(c) && c.length === 1) {
+    vnode.props.children = c[0];
+  }
+  return vnode;
 }
 
 function childrenToArray(children: unknown): unknown[] {

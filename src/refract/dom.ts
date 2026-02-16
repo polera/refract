@@ -120,7 +120,11 @@ export function applyProps(
         break;
       }
       case "className":
-        el.setAttribute("class", newProps[key] as string);
+        if (newProps[key] == null || newProps[key] === false) {
+          el.removeAttribute("class");
+        } else {
+          el.setAttribute("class", String(newProps[key]));
+        }
         break;
       case "style":
         if (typeof newProps[key] === "object" && newProps[key] !== null) {
@@ -148,11 +152,18 @@ export function applyProps(
           }
           el.addEventListener(event, getEventListener(newProps[key]));
         } else {
-          if (unsafeUrlPropChecker(key, newProps[key])) {
+          const value = newProps[key];
+          if (unsafeUrlPropChecker(key, value)) {
             el.removeAttribute(key);
             continue;
           }
-          el.setAttribute(key, String(newProps[key]));
+          if (value == null || value === false) {
+            el.removeAttribute(key);
+          } else if (value === true) {
+            el.setAttribute(key, "true");
+          } else {
+            el.setAttribute(key, String(value));
+          }
         }
         break;
     }

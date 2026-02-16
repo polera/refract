@@ -7,7 +7,7 @@ export type VNodeType = string | symbol | Component;
 /** Props passed to elements and components */
 export interface Props {
   [key: string]: unknown;
-  children?: VNode[];
+  children?: VNode[] | VNode;
   key?: string | number;
 }
 
@@ -27,6 +27,10 @@ export const DELETION = 4;
 export interface Hook {
   state: unknown;
   queue?: unknown[];
+  _setter?: Function;
+  _dispatch?: Function;
+  _reducer?: Function;
+  _fiber?: Fiber;
 }
 
 /** Internal fiber node — represents a mounted VNode */
