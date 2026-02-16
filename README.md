@@ -3,7 +3,7 @@
 # Refract
 
 A minimal React-like virtual DOM library, written in TypeScript with split entrypoints
-so you can keep bundles small and targetetd.
+so you can keep bundles small and targeted.
 
 Refract implements the core ideas behind React in TypeScript
 - a virtual DOM
