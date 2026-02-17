@@ -33,14 +33,16 @@ function cleanupFiberEffects(fiber: Fiber): void {
   if (!fiber.hooks) return;
 
   for (const hook of fiber.hooks) {
-    const state = hook.state as { cleanup?: () => void; pending?: boolean } | undefined;
-    if (state?.cleanup) {
-      state.cleanup();
-      state.cleanup = undefined;
+    const state = hook.state;
+    if (!state || typeof state !== "object") continue;
+    const effectState = state as { cleanup?: () => void; pending?: boolean };
+    if (effectState.cleanup) {
+      effectState.cleanup();
+      effectState.cleanup = undefined;
     }
     // Prevent deferred passive effects from running on unmounted fibers
-    if (state && "pending" in state) {
-      state.pending = false;
+    if ("pending" in effectState) {
+      effectState.pending = false;
     }
   }
 }
