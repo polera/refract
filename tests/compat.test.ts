@@ -54,7 +54,7 @@ describe("react compat", () => {
     expect(container.querySelector("span")!.id).toBe(ids[1]);
   });
 
-  it("runs insertion/layout/passive effects in commit order", () => {
+  it("runs insertion/layout effects synchronously, passive effects deferred", async () => {
     const root = createRoot(container);
     const calls: string[] = [];
 
@@ -72,6 +72,9 @@ describe("react compat", () => {
     }
 
     root.render(ReactCompat.createElement(App, null));
+    // Insertion and layout are synchronous; passive is deferred (like React)
+    expect(calls).toEqual(["insertion", "layout"]);
+    await waitForRender();
     expect(calls).toEqual(["insertion", "layout", "effect"]);
   });
 

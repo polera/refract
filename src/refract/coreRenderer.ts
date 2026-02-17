@@ -8,6 +8,7 @@ import {
   runAfterComponentRenderHandlers,
   runAfterCommitHandlers,
   runBeforeComponentRenderHandlers,
+  runBeforeRenderBatchHandlers,
   runCommitHandlers,
   runFiberCleanupHandlers,
   shouldBailoutComponent,
@@ -358,53 +359,65 @@ const MAX_NESTED_RENDERS = 50;
 const renderCounts = new Map<Node, number>();
 
 function flushRenders(): void {
-  flushScheduled = false;
-  // Snapshot and clear pendingContainers BEFORE processing,
-  // so effects that call scheduleRender during commit add to a fresh set.
-  const containers = [...pendingContainers];
-  pendingContainers.clear();
-  for (const container of containers) {
-    const currentRoot = roots.get(container);
-    if (!currentRoot) continue;
+  // Flush any pending passive effects from previous renders before
+  // starting new render work. This matches React's behavior: passive
+  // effects from render N are guaranteed to run before render N+1.
+  runBeforeRenderBatchHandlers();
 
-    // Re-render guard: detect infinite loops (matches React's limit of 50)
-    const count = (renderCounts.get(container) ?? 0) + 1;
-    if (count > MAX_NESTED_RENDERS) {
-      renderCounts.delete(container);
-      throw new Error(
-        "Too many re-renders. Refract limits the number of renders to prevent an infinite loop.",
-      );
+  // Keep flushScheduled true during processing to prevent duplicate
+  // microtask scheduling. Layout effects that call setState will add to
+  // pendingContainers, which we process in the next iteration of the
+  // while loop (synchronous cascade, protected by the render counter).
+  while (pendingContainers.size > 0) {
+    const containers = [...pendingContainers];
+    pendingContainers.clear();
+
+    for (const container of containers) {
+      const currentRoot = roots.get(container);
+      if (!currentRoot) continue;
+
+      // Re-render guard: detect infinite loops (matches React's limit of 50)
+      const count = (renderCounts.get(container) ?? 0) + 1;
+      if (count > MAX_NESTED_RENDERS) {
+        renderCounts.clear();
+        flushScheduled = false;
+        throw new Error(
+          "Too many re-renders. Refract limits the number of renders to prevent an infinite loop.",
+        );
+      }
+      renderCounts.set(container, count);
+
+      const newRoot: Fiber = {
+        type: currentRoot.type,
+        props: currentRoot.props,
+        key: currentRoot.key,
+        dom: currentRoot.dom,
+        parentDom: currentRoot.parentDom,
+        parent: null,
+        child: null,
+        sibling: null,
+        hooks: null,
+        alternate: currentRoot,
+        flags: UPDATE,
+      };
+      deletions = [];
+      isRendering = true;
+      performWork(newRoot);
+      isRendering = false;
+      const committedDeletions = deletions.slice();
+      commitRoot(newRoot);
+      runAfterCommitHandlers();
+      roots.set(container, newRoot);
+      runCommitHandlers(newRoot, committedDeletions);
     }
-    renderCounts.set(container, count);
-
-    const newRoot: Fiber = {
-      type: currentRoot.type,
-      props: currentRoot.props,
-      key: currentRoot.key,
-      dom: currentRoot.dom,
-      parentDom: currentRoot.parentDom,
-      parent: null,
-      child: null,
-      sibling: null,
-      hooks: null,
-      alternate: currentRoot,
-      flags: UPDATE,
-    };
-    deletions = [];
-    isRendering = true;
-    performWork(newRoot);
-    isRendering = false;
-    const committedDeletions = deletions.slice();
-    commitRoot(newRoot);
-    runAfterCommitHandlers();
-    roots.set(container, newRoot);
-    runCommitHandlers(newRoot, committedDeletions);
   }
 
-  // Reset counters when no more pending renders (loop resolved)
-  if (pendingContainers.size === 0) {
-    renderCounts.clear();
-  }
+  // All synchronous work complete (including layout effect cascades).
+  // Reset counter and allow new microtask scheduling.
+  // Deferred passive effects will trigger fresh flushRenders calls
+  // with their own counter scope.
+  renderCounts.clear();
+  flushScheduled = false;
 }
 
 export function flushPendingRenders(): void {

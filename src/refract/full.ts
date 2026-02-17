@@ -3,6 +3,7 @@ export { render } from "./render.js";
 export { memo } from "./memo.js";
 export { setHtmlSanitizer } from "./features/security.js";
 export { setDevtoolsHook, DEVTOOLS_GLOBAL_HOOK } from "./devtools.js";
+export { flushPassiveEffects } from "./hooksRuntime.js";
 export {
   useState,
   useEffect,

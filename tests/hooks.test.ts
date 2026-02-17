@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createElement } from "../src/refract/createElement.js";
 import { render } from "../src/refract/render.js";
 import { useState, useEffect, useRef, useMemo, useCallback, useReducer } from "../src/refract/hooks.js";
+import { flushPassiveEffects } from "../src/refract/hooksRuntime.js";
 
 describe("hooks", () => {
   let container: HTMLDivElement;
@@ -73,13 +74,28 @@ describe("hooks", () => {
   });
 
   describe("useEffect", () => {
-    it("runs effect after render", () => {
+    it("runs effect after render (deferred)", async () => {
       const effectFn = vi.fn();
       function App() {
         useEffect(effectFn);
         return createElement("div", null);
       }
       render(createElement(App, null), container);
+      // Passive effects are deferred (like React)
+      expect(effectFn).not.toHaveBeenCalled();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(effectFn).toHaveBeenCalledTimes(1);
+    });
+
+    it("can be flushed synchronously with flushPassiveEffects", () => {
+      const effectFn = vi.fn();
+      function App() {
+        useEffect(effectFn);
+        return createElement("div", null);
+      }
+      render(createElement(App, null), container);
+      expect(effectFn).not.toHaveBeenCalled();
+      flushPassiveEffects();
       expect(effectFn).toHaveBeenCalledTimes(1);
     });
 
@@ -112,6 +128,8 @@ describe("hooks", () => {
         return createElement("span", null, String(value));
       }
       render(createElement(App, null), container);
+      // Flush initial passive effects
+      flushPassiveEffects();
       expect(effectFn).toHaveBeenCalledTimes(1);
 
       setValue(1);
