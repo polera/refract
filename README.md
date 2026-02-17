@@ -224,22 +224,22 @@ The values below are from a local run on February 17, 2026.
 
 | Framework                  | JS bundle (raw) | JS bundle (gzip) |
 |---------------------------|----------------:|-----------------:|
-| Refract (`core`)          | 8.62 kB         | 3.24 kB          |
-| Refract (`core+hooks`)    | 10.27 kB        | 3.84 kB          |
-| Refract (`core+context`)  | 9.12 kB         | 3.47 kB          |
-| Refract (`core+memo`)     | 9.29 kB         | 3.47 kB          |
-| Refract (`core+security`) | 9.53 kB         | 3.54 kB          |
-| Refract (`refract`)       | 15.20 kB        | 5.55 kB          |
-| React                     | 189.74 kB       | 59.58 kB         |
-| Preact                    | 14.46 kB        | 5.96 kB          |
+| Refract (`core`)          | 10.02 kB        | 3.74 kB          |
+| Refract (`core+hooks`)    | 12.08 kB        | 4.49 kB          |
+| Refract (`core+context`)  | 10.66 kB        | 4.00 kB          |
+| Refract (`core+memo`)     | 10.70 kB        | 3.97 kB          |
+| Refract (`core+security`) | 10.93 kB        | 4.03 kB          |
+| Refract (`refract`)       | 17.15 kB        | 6.23 kB          |
+| React                     | 189.74 kB       | 59.52 kB         |
+| Preact                    | 14.46 kB        | 5.95 kB          |
 
 Load-time metrics are machine-dependent, so the benchmark script prints a fresh
 per-run timing table (median, p95, min/max, sd) for every framework.
-The CI preset (`make bench-ci`, 40 measured + 5 warmup runs) also passed on
-February 17, 2026 with default guardrails (`DCL p95 <= 16ms`, `DCL sd <= 2ms`).
+The CI preset (`make bench-ci`, 40 measured + 5 warmup runs) enforces default
+guardrails (`DCL p95 <= 16ms`, `DCL sd <= 2ms`).
 
-From this snapshot, Refract `core` gzip JS is about 18.4x smaller than React,
-and the full `refract` entrypoint is about 10.7x smaller.
+From this snapshot, Refract `core` gzip JS is about 15.9x smaller than React,
+and the full `refract` entrypoint is about 9.6x smaller.
 
 ### Component Combination Benchmarks (Vitest)
 
@@ -249,15 +249,15 @@ Higher `hz` is better.
 
 | Component usage profile | Mount (hz) | Mount vs base | Reconcile (hz) | Reconcile vs base |
 |-------------------------|------------|---------------|----------------|-------------------|
-| `base` | 6570.25 | baseline | 3413.29 | baseline |
-| `memo` | 7257.38 | +10.5% | 7541.91 | +120.9% |
-| `context` | 6427.45 | -2.2% | 7119.35 | +108.6% |
-| `fragment` | 5935.06 | -9.7% | 3437.54 | +0.7% |
-| `keyed` | 9022.55 | +37.3% | 6535.55 | +91.5% |
-| `memo+context` | 7015.37 | +6.8% | 6782.87 | +98.7% |
-| `memo+context+keyed` | 7992.82 | +21.7% | 6803.09 | +99.3% |
+| `base` | 5160.53 | baseline | 3262.99 | baseline |
+| `memo` | 4858.51 | -5.9% | 5092.55 | +56.1% |
+| `context` | 3862.01 | -25.2% | 4954.24 | +51.8% |
+| `fragment` | 4656.36 | -9.8% | 3760.97 | +15.3% |
+| `keyed` | 5754.75 | +11.5% | 4311.45 | +32.1% |
+| `memo+context` | 5872.59 | +13.8% | 4621.45 | +41.6% |
+| `memo+context+keyed` | 5555.42 | +7.7% | 4509.78 | +38.2% |
 
-In this run, `keyed` was the fastest mount profile, while
+In this run, `memo+context` was the fastest mount profile, while
 `memo` was the fastest reconcile profile.
 
 ### Running the Benchmark
@@ -304,7 +304,7 @@ How Refract compares to React and Preact:
 | SVG support                    | Yes     | Yes   | Yes    |
 | **Components**                 |         |       |        |
 | Functional components          | Yes     | Yes   | Yes    |
-| Class components               | No      | Yes   | Yes    |
+| Class components               | Partial⁶ | Yes   | Yes    |
 | **Hooks**                      |         |       |        |
 | useState                       | Yes     | Yes   | Yes    |
 | useEffect                      | Yes     | Yes   | Yes    |
@@ -329,10 +329,10 @@ How Refract compares to React and Preact:
 | className prop                 | Yes     | Yes   | Yes¹   |
 | dangerouslySetInnerHTML        | Yes     | Yes   | Yes    |
 | Portals                        | Yes     | Yes   | Yes    |
-| Suspense / lazy                | No      | Yes   | Yes²   |
+| Suspense / lazy                | No⁸     | Yes   | Yes²   |
 | Error boundaries               | Yes³    | Yes   | Yes    |
 | Server-side rendering          | No      | Yes   | Yes    |
-| Hydration                      | No      | Yes   | Yes    |
+| Hydration                      | No⁹     | Yes   | Yes    |
 | **Security**                   |         |       |        |
 | Default HTML sanitizer for `dangerouslySetInnerHTML` | Yes | No | No |
 | Configurable HTML sanitizer hook (`setHtmlSanitizer`) | Yes | No | No |
@@ -340,19 +340,22 @@ How Refract compares to React and Preact:
 | Fiber architecture             | Yes     | Yes   | No     |
 | Concurrent rendering           | No      | Yes   | No     |
 | Automatic batching             | Yes     | Yes   | Yes    |
-| memo / PureComponent           | Yes     | Yes   | Yes    |
+| memo / PureComponent           | Partial¹⁰ | Yes | Yes    |
 | **Ecosystem**                  |         |       |        |
 | DevTools                       | Basic (hook API) | Yes   | Yes    |
-| React compatibility layer      | Yes⁶    | N/A   | Yes⁷   |
-| **Bundle Size (gzip, JS)**     | ~3.2-5.6 kB⁴ | ~59.5 kB | ~6.0 kB |
+| React compatibility layer      | Partial⁶ | N/A  | Yes⁷   |
+| **Bundle Size (gzip, JS)**     | ~3.7-6.3 kB⁴ | ~59.5 kB | ~6.0 kB |
 
 ¹ Preact supports both `class` and `className`.
 ² Preact has partial Suspense support via `preact/compat`.
-³ Refract uses the `useErrorBoundary` hook rather than class-based error boundaries.
+³ Refract core uses the `useErrorBoundary` hook; compat wrappers can emulate class-style boundaries.
 ⁴ Refract size depends on entrypoint (`refract/core` vs `refract` full).
 ⁵ Refract exposes `useTransition` / `useDeferredValue` but currently runs both synchronously (no concurrent scheduling).
-⁶ Available via opt-in compat entrypoints (`refract/compat/react*`).
+⁶ Available via opt-in compat entrypoints (`refract/compat/react*`) with partial React API parity.
 ⁷ Preact compatibility is provided through `preact/compat`.
+⁸ Compat exports `Suspense`/`lazy`, but full suspension/fallback semantics are not implemented.
+⁹ `hydrateRoot` is exposed in compat, but currently performs client render rather than true SSR hydration.
+¹⁰ `memo` is supported; `PureComponent` is compat-oriented and does not guarantee full React shallow-compare behavior.
 
 ## License
 
