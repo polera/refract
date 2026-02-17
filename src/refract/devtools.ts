@@ -32,6 +32,7 @@ export interface RefractDevtoolsHook {
 let explicitHook: RefractDevtoolsHook | null | undefined = undefined;
 let activeHook: RefractDevtoolsHook | null = null;
 let activeRendererId = 1;
+let commitReporterRegistered = false;
 
 const containerIds = new WeakMap<Node, number>();
 let nextContainerId = 1;
@@ -40,6 +41,7 @@ const fiberIds = new WeakMap<Fiber, number>();
 let nextFiberId = 1;
 
 export function setDevtoolsHook(hook?: RefractDevtoolsHook | null): void {
+  ensureDevtoolsCommitReporting();
   explicitHook = hook;
   activeHook = null;
   activeRendererId = 1;
@@ -68,7 +70,11 @@ export function reportDevtoolsCommit(rootFiber: Fiber, deletions: Fiber[]): void
   }
 }
 
-registerCommitHandler(reportDevtoolsCommit);
+function ensureDevtoolsCommitReporting(): void {
+  if (commitReporterRegistered) return;
+  commitReporterRegistered = true;
+  registerCommitHandler(reportDevtoolsCommit);
+}
 
 function resolveHook(): RefractDevtoolsHook | null {
   if (explicitHook !== undefined) return explicitHook;

@@ -158,9 +158,10 @@ subsequent renders to the same container.
 
 ### DevTools hook integration
 
-Refract emits commit and unmount events when a hook is present at
+Call `setDevtoolsHook(...)` to enable commit and unmount events. Refract uses
+the explicit hook you provide, or falls back to
 `window.__REFRACT_DEVTOOLS_GLOBAL_HOOK__` (or `globalThis` in non-browser
-environments). You can also set the hook directly with `setDevtoolsHook`.
+environments) when called with no argument.
 
 ```ts
 import { setDevtoolsHook } from "refract";
@@ -229,7 +230,7 @@ The values below are from a local run on February 17, 2026.
 | Refract (`core+context`)  | 10.66 kB        | 4.00 kB          |
 | Refract (`core+memo`)     | 10.70 kB        | 3.97 kB          |
 | Refract (`core+security`) | 10.93 kB        | 4.03 kB          |
-| Refract (`refract`)       | 17.15 kB        | 6.23 kB          |
+| Refract (`refract`)       | 14.45 kB        | 5.28 kB          |
 | React                     | 189.74 kB       | 59.52 kB         |
 | Preact                    | 14.46 kB        | 5.95 kB          |
 
@@ -239,7 +240,7 @@ The CI preset (`make bench-ci`, 40 measured + 5 warmup runs) enforces default
 guardrails (`DCL p95 <= 16ms`, `DCL sd <= 2ms`).
 
 From this snapshot, Refract `core` gzip JS is about 15.9x smaller than React,
-and the full `refract` entrypoint is about 9.6x smaller.
+and the full `refract` entrypoint is about 11.3x smaller.
 
 ### Component Combination Benchmarks (Vitest)
 
@@ -344,7 +345,7 @@ How Refract compares to React and Preact:
 | **Ecosystem**                  |         |       |        |
 | DevTools                       | Basic (hook API) | Yes   | Yes    |
 | React compatibility layer      | Partial⁶ | N/A  | Yes⁷   |
-| **Bundle Size (gzip, JS)**     | ~3.7-6.3 kB⁴ | ~59.5 kB | ~6.0 kB |
+| **Bundle Size (gzip, JS)**     | ~3.7-5.3 kB⁴ | ~59.5 kB | ~6.0 kB |
 
 ¹ Preact supports both `class` and `className`.
 ² Preact has partial Suspense support via `preact/compat`.
