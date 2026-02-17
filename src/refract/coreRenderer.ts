@@ -52,6 +52,7 @@ export function renderFiber(vnode: VNode, container: Node): void {
   isRendering = false;
   const committedDeletions = deletions.slice();
   commitRoot(rootFiber);
+  clearAlternates(rootFiber);
   runAfterCommitHandlers();
   roots.set(container, rootFiber);
   runCommitHandlers(rootFiber, committedDeletions);
@@ -309,6 +310,17 @@ function setRef(ref: unknown, value: Node | null): void {
   }
 }
 
+/** Release alternate references after commit to prevent memory leaks.
+ *  Alternates are only needed during reconciliation; retaining them
+ *  creates an ever-growing chain of old fiber trees. */
+function clearAlternates(fiber: Fiber | null): void {
+  while (fiber) {
+    fiber.alternate = null;
+    if (fiber.child) clearAlternates(fiber.child);
+    fiber = fiber.sibling;
+  }
+}
+
 function commitDeletion(fiber: Fiber): void {
   runCleanups(fiber);
   // Clear ref on unmount
@@ -406,6 +418,7 @@ function flushRenders(): void {
       isRendering = false;
       const committedDeletions = deletions.slice();
       commitRoot(newRoot);
+      clearAlternates(newRoot);
       runAfterCommitHandlers();
       roots.set(container, newRoot);
       runCommitHandlers(newRoot, committedDeletions);
