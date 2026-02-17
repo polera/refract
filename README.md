@@ -121,6 +121,11 @@ export default defineConfig({
 The compat layer is intentionally separate from core so users who do not need
 React ecosystem compatibility keep the smallest and fastest Refract bundles.
 
+Compatibility status (last verified February 17, 2026):
+- `yarn test`: 14 files passed, 85 tests passed
+- Compat-focused suites passed: `tests/compat.test.ts` (10), `tests/poc-compat.test.ts` (2), `tests/react-router-smoke.test.ts` (3)
+- Verified behaviors include `forwardRef`, portals, `createRoot`, JSX runtimes, `useSyncExternalStore`, `flushSync`, and react-router tree construction/dispatcher bridging
+
 ## API
 
 ### createElement(type, props, ...children)
@@ -215,21 +220,23 @@ image requests blocked.
 
 ### Bundle Size Snapshot
 
-The values below are from a local run on February 16, 2026.
+The values below are from a local run on February 17, 2026.
 
 | Framework                  | JS bundle (raw) | JS bundle (gzip) |
 |---------------------------|----------------:|-----------------:|
 | Refract (`core`)          | 8.62 kB         | 3.24 kB          |
-| Refract (`core+hooks`)    | 10.28 kB        | 3.85 kB          |
+| Refract (`core+hooks`)    | 10.27 kB        | 3.84 kB          |
 | Refract (`core+context`)  | 9.12 kB         | 3.47 kB          |
-| Refract (`core+memo`)     | 9.29 kB         | 3.48 kB          |
+| Refract (`core+memo`)     | 9.29 kB         | 3.47 kB          |
 | Refract (`core+security`) | 9.53 kB         | 3.54 kB          |
 | Refract (`refract`)       | 15.20 kB        | 5.55 kB          |
-| React                     | 189.74 kB       | 59.52 kB         |
-| Preact                    | 14.46 kB        | 5.95 kB          |
+| React                     | 189.74 kB       | 59.58 kB         |
+| Preact                    | 14.46 kB        | 5.96 kB          |
 
 Load-time metrics are machine-dependent, so the benchmark script prints a fresh
 per-run timing table (median, p95, min/max, sd) for every framework.
+The CI preset (`make bench-ci`, 40 measured + 5 warmup runs) also passed on
+February 17, 2026 with default guardrails (`DCL p95 <= 16ms`, `DCL sd <= 2ms`).
 
 From this snapshot, Refract `core` gzip JS is about 18.4x smaller than React,
 and the full `refract` entrypoint is about 10.7x smaller.
@@ -242,16 +249,16 @@ Higher `hz` is better.
 
 | Component usage profile | Mount (hz) | Mount vs base | Reconcile (hz) | Reconcile vs base |
 |-------------------------|------------|---------------|----------------|-------------------|
-| `base` | 5341.47 | baseline | 3932.98 | baseline |
-| `memo` | 5821.44 | +9.0% | 5202.62 | +32.3% |
-| `context` | 3960.70 | -25.9% | 5108.06 | +29.9% |
-| `fragment` | 4739.90 | -11.3% | 4114.70 | +4.6% |
-| `keyed` | 6008.81 | +12.5% | 4816.85 | +22.5% |
-| `memo+context` | 5670.29 | +6.2% | 5231.58 | +33.0% |
-| `memo+context+keyed` | 5813.60 | +8.8% | 4606.91 | +17.1% |
+| `base` | 6570.25 | baseline | 3413.29 | baseline |
+| `memo` | 7257.38 | +10.5% | 7541.91 | +120.9% |
+| `context` | 6427.45 | -2.2% | 7119.35 | +108.6% |
+| `fragment` | 5935.06 | -9.7% | 3437.54 | +0.7% |
+| `keyed` | 9022.55 | +37.3% | 6535.55 | +91.5% |
+| `memo+context` | 7015.37 | +6.8% | 6782.87 | +98.7% |
+| `memo+context+keyed` | 7992.82 | +21.7% | 6803.09 | +99.3% |
 
 In this run, `keyed` was the fastest mount profile, while
-`memo+context` was the fastest reconcile profile.
+`memo` was the fastest reconcile profile.
 
 ### Running the Benchmark
 

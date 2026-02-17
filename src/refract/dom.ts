@@ -146,7 +146,19 @@ export function applyProps(
         break;
       default:
         if (key.startsWith("on")) {
-          const event = key.slice(2).toLowerCase();
+          let event = key.slice(2).toLowerCase();
+          if (reactCompatEventMode && event === "change") {
+            const tagName = el.tagName;
+            if (tagName === "TEXTAREA") {
+              event = "input";
+            } else if (tagName === "INPUT") {
+              const type = (el as HTMLInputElement).type;
+              if (type !== "checkbox" && type !== "radio" && type !== "file") {
+                event = "input";
+              }
+            }
+          }
+
           if (oldProps[key]) {
             el.removeEventListener(event, getEventListener(oldProps[key]));
           }

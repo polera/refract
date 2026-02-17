@@ -14,8 +14,8 @@ describe("createElement", () => {
   it("creates an element with string children as text nodes", () => {
     const vnode = createElement("span", null, "hello");
     expect(vnode.props.children).toHaveLength(1);
-    expect(vnode.props.children![0].type).toBe("TEXT");
-    expect(vnode.props.children![0].props.nodeValue).toBe("hello");
+    expect((vnode.props.children as unknown as any[])[0].type).toBe("TEXT");
+    expect((vnode.props.children as unknown as any[])[0].props.nodeValue).toBe("hello");
   });
 
   it("creates nested elements", () => {
@@ -27,8 +27,8 @@ describe("createElement", () => {
     );
     expect(vnode.type).toBe("div");
     expect(vnode.props.children).toHaveLength(2);
-    expect(vnode.props.children![0].type).toBe("img");
-    expect(vnode.props.children![1].type).toBe("span");
+    expect((vnode.props.children as unknown as any[])[0].type).toBe("img");
+    expect((vnode.props.children as unknown as any[])[1].type).toBe("span");
   });
 
   it("flattens array children", () => {
@@ -44,7 +44,7 @@ describe("createElement", () => {
   it("filters out null, undefined, and boolean children", () => {
     const vnode = createElement("div", null, null, undefined, false, true, "text");
     expect(vnode.props.children).toHaveLength(1);
-    expect(vnode.props.children![0].type).toBe("TEXT");
+    expect((vnode.props.children as unknown as any[])[0].type).toBe("TEXT");
   });
 
   it("retains function type for components (deferred)", () => {
@@ -60,7 +60,7 @@ describe("createElement", () => {
   it("converts numbers to text nodes", () => {
     const vnode = createElement("span", null, 42);
     expect(vnode.props.children).toHaveLength(1);
-    expect(vnode.props.children![0].props.nodeValue).toBe("42");
+    expect((vnode.props.children as unknown as any[])[0].props.nodeValue).toBe("42");
   });
 
   it("extracts key from props", () => {

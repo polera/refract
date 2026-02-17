@@ -1,5 +1,6 @@
 import { createElement, Fragment } from "../createElement.js";
 import type { VNode, VNodeType } from "../types.js";
+import { isClassComponent, wrapClassComponent, getWrappedHandler } from "./react.js";
 
 type JsxProps = Record<string, unknown> | null | undefined;
 type JsxChild = VNode | string | number | boolean | null | undefined | JsxChild[];
@@ -18,6 +19,8 @@ function normalizeVNodeChildren(vnode: VNode): VNode {
 }
 
 function createJsxElement(type: VNodeType, rawProps: JsxProps, key?: string): ReturnType<typeof createElement> {
+  const effectiveType = isClassComponent(type) ? wrapClassComponent(type as Function) : type;
+  
   const props = { ...(rawProps ?? {}) };
   if (key !== undefined) {
     props.key = key;
@@ -25,13 +28,22 @@ function createJsxElement(type: VNodeType, rawProps: JsxProps, key?: string): Re
   const children = props.children as JsxChild | JsxChild[] | undefined;
   delete props.children;
 
+  // Wrap event handlers
+  if (typeof type === 'string') {
+    for (const key in props) {
+      if (key.startsWith('on') && typeof props[key] === 'function') {
+        props[key] = getWrappedHandler(props[key] as Function);
+      }
+    }
+  }
+
   let vnode: VNode;
   if (children === undefined) {
-    vnode = createElement(type, props);
+    vnode = createElement(effectiveType as VNodeType, props);
   } else if (Array.isArray(children)) {
-    vnode = createElement(type, props, ...(children as JsxChild[]));
+    vnode = createElement(effectiveType as VNodeType, props, ...(children as JsxChild[]));
   } else {
-    vnode = createElement(type, props, children as JsxChild);
+    vnode = createElement(effectiveType as VNodeType, props, children as JsxChild);
   }
   return normalizeVNodeChildren(vnode);
 }

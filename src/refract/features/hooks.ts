@@ -257,12 +257,17 @@ export function useSyncExternalStore<T>(
   // snapshots (e.g. zustand selectors returning store actions) as updaters.
   const [snapshot, setSnapshot] = useState<T>(() => getSnapshot());
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const handleStoreChange = () => {
       setSnapshot(() => getSnapshot());
     };
     const unsubscribe = subscribe(handleStoreChange);
-    handleStoreChange();
+    
+    // Check if snapshot changed between render and effect
+    if (getSnapshot() !== snapshot) {
+      handleStoreChange();
+    }
+
     return () => {
       unsubscribe();
     };
