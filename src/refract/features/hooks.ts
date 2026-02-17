@@ -75,8 +75,10 @@ export function useEffect(effect: () => EffectCleanup, deps?: unknown[]): void {
       hook.state.deps = deps;
       hook.state.pending = true;
       markPendingEffects(fiber);
-    } else {
-      hook.state.pending = false;
+    } else if (hook.state.pending) {
+      // Re-render before effect was flushed — keep it pending and
+      // re-register the fiber so the deferred flush still finds it.
+      markPendingEffects(fiber);
     }
   }
 }
@@ -94,8 +96,8 @@ export function useLayoutEffect(effect: () => EffectCleanup, deps?: unknown[]): 
       hook.state.deps = deps;
       hook.state.pending = true;
       markPendingLayoutEffects(fiber);
-    } else {
-      hook.state.pending = false;
+    } else if (hook.state.pending) {
+      markPendingLayoutEffects(fiber);
     }
   }
 }
@@ -113,8 +115,8 @@ export function useInsertionEffect(effect: () => EffectCleanup, deps?: unknown[]
       hook.state.deps = deps;
       hook.state.pending = true;
       markPendingInsertionEffects(fiber);
-    } else {
-      hook.state.pending = false;
+    } else if (hook.state.pending) {
+      markPendingInsertionEffects(fiber);
     }
   }
 }
