@@ -38,7 +38,7 @@ describe("react-router-dom compatibility smoke", () => {
       ),
     );
     expect(tree.type).toBe(MemoryRouter);
-    expect((tree.props.children as unknown[]).length).toBe(1);
+    expect(React.Children.count(tree.props.children)).toBe(1);
   });
 
   it("supports hook dispatcher bridging for externally-resolved React", async () => {

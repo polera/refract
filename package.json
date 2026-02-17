@@ -1,6 +1,6 @@
 {
   "name": "@ipxjs/refract",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "A minimal React-like virtual DOM library with an optional React compat layer",
   "type": "module",
   "main": "src/refract/index.ts",
