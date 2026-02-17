@@ -1,5 +1,6 @@
 import { createElement, Fragment } from "../createElement.js";
 import { flushPendingRenders } from "../coreRenderer.js";
+import { flushPassiveEffects } from "../hooksRuntime.js";
 import { setReactCompatEventMode } from "../dom.js";
 import { createPortal as createPortalImpl } from "../portal.js";
 import type { PortalChild } from "../portal.js";
@@ -18,6 +19,7 @@ export function unstable_batchedUpdates<T>(callback: () => T): T {
 export function flushSync<T>(callback: () => T): T {
   const result = callback();
   flushPendingRenders();
+  flushPassiveEffects();
   return result;
 }
 

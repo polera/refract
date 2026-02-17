@@ -58,6 +58,7 @@ interface EffectHook extends Hook {
     deps: unknown[] | undefined;
     cleanup?: EffectCleanup;
     pending: boolean;
+    effectType: "insertion" | "layout" | "passive";
   };
 }
 
@@ -66,7 +67,7 @@ export function useEffect(effect: () => EffectCleanup, deps?: unknown[]): void {
   const fiber = currentFiber!;
 
   if (hook.state === undefined) {
-    hook.state = { effect, deps, cleanup: undefined, pending: true };
+    hook.state = { effect, deps, cleanup: undefined, pending: true, effectType: "passive" };
     markPendingEffects(fiber);
   } else {
     if (depsChanged(hook.state.deps, deps)) {
@@ -85,7 +86,7 @@ export function useLayoutEffect(effect: () => EffectCleanup, deps?: unknown[]): 
   const fiber = currentFiber!;
 
   if (hook.state === undefined) {
-    hook.state = { effect, deps, cleanup: undefined, pending: true };
+    hook.state = { effect, deps, cleanup: undefined, pending: true, effectType: "layout" };
     markPendingLayoutEffects(fiber);
   } else {
     if (depsChanged(hook.state.deps, deps)) {
@@ -104,7 +105,7 @@ export function useInsertionEffect(effect: () => EffectCleanup, deps?: unknown[]
   const fiber = currentFiber!;
 
   if (hook.state === undefined) {
-    hook.state = { effect, deps, cleanup: undefined, pending: true };
+    hook.state = { effect, deps, cleanup: undefined, pending: true, effectType: "insertion" };
     markPendingInsertionEffects(fiber);
   } else {
     if (depsChanged(hook.state.deps, deps)) {

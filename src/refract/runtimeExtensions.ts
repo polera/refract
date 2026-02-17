@@ -2,6 +2,7 @@ import type { Fiber } from "./types.js";
 
 type FiberCleanupHandler = (fiber: Fiber) => void;
 type AfterCommitHandler = () => void;
+type BeforeRenderBatchHandler = () => void;
 type RenderErrorHandler = (fiber: Fiber, error: unknown) => boolean;
 type CommitHandler = (rootFiber: Fiber, deletions: Fiber[]) => void;
 type ComponentBailoutHandler = (fiber: Fiber) => boolean;
@@ -10,6 +11,7 @@ type AfterComponentRenderHandler = (fiber: Fiber) => void;
 
 const fiberCleanupHandlers = new Set<FiberCleanupHandler>();
 const afterCommitHandlers = new Set<AfterCommitHandler>();
+const beforeRenderBatchHandlers = new Set<BeforeRenderBatchHandler>();
 const renderErrorHandlers = new Set<RenderErrorHandler>();
 const commitHandlers = new Set<CommitHandler>();
 const componentBailoutHandlers = new Set<ComponentBailoutHandler>();
@@ -30,6 +32,11 @@ export function registerFiberCleanupHandler(handler: FiberCleanupHandler): () =>
 export function registerAfterCommitHandler(handler: AfterCommitHandler): () => void {
   afterCommitHandlers.add(handler);
   return makeUnregister(afterCommitHandlers, handler);
+}
+
+export function registerBeforeRenderBatchHandler(handler: BeforeRenderBatchHandler): () => void {
+  beforeRenderBatchHandlers.add(handler);
+  return makeUnregister(beforeRenderBatchHandlers, handler);
 }
 
 export function registerRenderErrorHandler(handler: RenderErrorHandler): () => void {
@@ -65,6 +72,12 @@ export function runFiberCleanupHandlers(fiber: Fiber): void {
 
 export function runAfterCommitHandlers(): void {
   for (const handler of afterCommitHandlers) {
+    handler();
+  }
+}
+
+export function runBeforeRenderBatchHandlers(): void {
+  for (const handler of beforeRenderBatchHandlers) {
     handler();
   }
 }
