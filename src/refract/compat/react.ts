@@ -1,6 +1,6 @@
 import { createElement as createElementImpl, Fragment } from "../createElement.js";
 import { memo } from "../memo.js";
-import { createContext as createContextImpl } from "../features/context.js";
+import { createContext as createContextImpl, setContextValue } from "../features/context.js";
 import {
   createRef,
   useErrorBoundary,
@@ -15,6 +15,9 @@ import {
 } from "./sharedInternals.js";
 
 const REACT_ELEMENT_TYPE = Symbol.for("react.element");
+const REACT_FORWARD_REF_TYPE = Symbol.for("react.forward_ref");
+const REACT_MEMO_TYPE = Symbol.for("react.memo");
+const REACT_CONTEXT_TYPE = Symbol.for("react.context");
 type ElementChild = VNode | string | number | boolean | null | undefined | ElementChild[];
 
 ensureHookDispatcherRuntime();
@@ -292,6 +295,7 @@ export function lazy<T extends { default: (...args: any[]) => any }>(
 // ---------------------------------------------------------------------------
 
 const classWrapperCache = new WeakMap<Function, Function>();
+const exoticTypeCache = new WeakMap<object, unknown>();
 
 export function isClassComponent(type: unknown): boolean {
   return (
@@ -389,6 +393,76 @@ export function wrapClassComponent(ClassComp: Function): (props: any) => unknown
   return Wrapper;
 }
 
+export function resolveCompatType(type: unknown): unknown {
+  if (isClassComponent(type)) {
+    return wrapClassComponent(type as Function);
+  }
+
+  if (!type || typeof type !== "object") {
+    return type;
+  }
+
+  const cached = exoticTypeCache.get(type as object);
+  if (cached) return cached;
+
+  const exoticType = type as {
+    $$typeof?: symbol;
+    compare?: (a: Record<string, unknown>, b: Record<string, unknown>) => boolean;
+    displayName?: string;
+    render?: (props: Props, ref: { current: unknown } | ((value: unknown) => void) | null) => VNode;
+    type?: unknown;
+  };
+
+  if (exoticType.$$typeof === REACT_FORWARD_REF_TYPE && typeof exoticType.render === "function") {
+    const render = exoticType.render;
+    const wrappedForwardRef: RefractComponent = (props: Props) => {
+      const { ref, ...rest } = props as Props & { ref?: { current: unknown } | ((value: unknown) => void) | null };
+      return render(rest, ref ?? null);
+    };
+    (wrappedForwardRef as any).displayName = exoticType.displayName
+      ?? `ForwardRef(${(render as any).name || "anonymous"})`;
+    exoticTypeCache.set(type as object, wrappedForwardRef);
+    return wrappedForwardRef;
+  }
+
+  if (exoticType.$$typeof === REACT_MEMO_TYPE && exoticType.type != null) {
+    const resolvedInner = resolveCompatType(exoticType.type);
+    if (typeof resolvedInner === "function") {
+      const wrappedMemo = memo(
+        resolvedInner as (props: Props) => VNode,
+        typeof exoticType.compare === "function" ? exoticType.compare : undefined,
+      );
+      (wrappedMemo as any).displayName = exoticType.displayName
+        ?? (resolvedInner as any).displayName
+        ?? (resolvedInner as any).name
+        ?? "Memo";
+      exoticTypeCache.set(type as object, wrappedMemo);
+      return wrappedMemo;
+    }
+    exoticTypeCache.set(type as object, resolvedInner);
+    return resolvedInner;
+  }
+
+  if (exoticType.$$typeof === REACT_CONTEXT_TYPE) {
+    const contextObject = type as object;
+    const wrappedContextProvider: RefractComponent = (props: Props) => {
+      setContextValue(contextObject, props.value);
+      const children = props.children ?? [];
+      if (Array.isArray(children)) {
+        return children.length === 1
+          ? children[0] as VNode
+          : createElementImpl(Fragment, null, ...(children as ElementChild[]));
+      }
+      return children as VNode;
+    };
+    (wrappedContextProvider as any).displayName = (exoticType as any).displayName ?? "ContextProvider";
+    exoticTypeCache.set(type as object, wrappedContextProvider);
+    return wrappedContextProvider;
+  }
+
+  return type;
+}
+
 // ---------------------------------------------------------------------------
 // Event Wrapping
 // ---------------------------------------------------------------------------
@@ -457,7 +531,7 @@ function normalizeChildrenSingle(vnode: any): any {
 }
 
 export function createElement(type: unknown, props?: unknown, ...children: unknown[]): VNode {
-  const effectiveType = isClassComponent(type) ? wrapClassComponent(type as Function) : type;
+  const effectiveType = resolveCompatType(type);
 
   if (typeof type === 'string' && props && typeof props === 'object') {
     const newProps = { ...props } as Record<string, unknown>;

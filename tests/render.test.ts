@@ -79,4 +79,45 @@ describe("render", () => {
     const link = container.querySelector("a")!;
     expect(link.getAttribute("href")).toBe("https://example.com");
   });
+
+  it("normalizes camelCase SVG attributes used by chart paths", () => {
+    const vnode = createElement(
+      "svg",
+      { viewBox: "0 0 100 100" },
+      createElement("g", { clipPath: "url(#sector-mask)" },
+        createElement("path", {
+          d: "M 10 10 L 20 20",
+          strokeWidth: 6,
+          strokeLinecap: "round",
+          strokeLinejoin: "round",
+          fillOpacity: 0.4,
+        }),
+      ),
+    );
+    render(vnode, container);
+
+    const svg = container.querySelector("svg")!;
+    const group = container.querySelector("g")!;
+    const path = container.querySelector("path")!;
+
+    expect(svg.getAttribute("viewBox")).toBe("0 0 100 100");
+    expect(group.getAttribute("clip-path")).toBe("url(#sector-mask)");
+    expect(path.getAttribute("stroke-width")).toBe("6");
+    expect(path.getAttribute("stroke-linecap")).toBe("round");
+    expect(path.getAttribute("stroke-linejoin")).toBe("round");
+    expect(path.getAttribute("fill-opacity")).toBe("0.4");
+  });
+
+  it("maps xlinkHref on SVG use elements", () => {
+    const vnode = createElement(
+      "svg",
+      null,
+      createElement("defs", null, createElement("path", { id: "slice", d: "M 0 0 L 5 5" })),
+      createElement("use", { xlinkHref: "#slice" }),
+    );
+    render(vnode, container);
+
+    const use = container.querySelector("use")!;
+    expect(use.getAttribute("xlink:href")).toBe("#slice");
+  });
 });

@@ -1,6 +1,6 @@
 import { createElement, Fragment } from "../createElement.js";
 import type { VNode, VNodeType } from "../types.js";
-import { isClassComponent, wrapClassComponent, getWrappedHandler } from "./react.js";
+import { resolveCompatType, getWrappedHandler } from "./react.js";
 
 type JsxProps = Record<string, unknown> | null | undefined;
 type JsxChild = VNode | string | number | boolean | null | undefined | JsxChild[];
@@ -19,7 +19,7 @@ function normalizeVNodeChildren(vnode: VNode): VNode {
 }
 
 function createJsxElement(type: VNodeType, rawProps: JsxProps, key?: string): ReturnType<typeof createElement> {
-  const effectiveType = isClassComponent(type) ? wrapClassComponent(type as Function) : type;
+  const effectiveType = resolveCompatType(type);
   
   const props = { ...(rawProps ?? {}) };
   if (key !== undefined) {

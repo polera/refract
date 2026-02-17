@@ -4,6 +4,7 @@ import { reconcileChildren } from "./reconcile.js";
 import { Fragment } from "./createElement.js";
 import { Portal } from "./portal.js";
 import { createDom, applyProps } from "./dom.js";
+import { setContextValue } from "./features/context.js";
 import {
   runAfterComponentRenderHandlers,
   runAfterCommitHandlers,
@@ -24,6 +25,11 @@ export let isRendering = false;
 /** Store root fiber per container */
 const roots = new WeakMap<Node, Fiber>();
 let deletions: Fiber[] = [];
+const REACT_FORWARD_REF_TYPE = Symbol.for("react.forward_ref");
+const REACT_MEMO_TYPE = Symbol.for("react.memo");
+const REACT_CONTEXT_TYPE = Symbol.for("react.context");
+const REACT_FRAGMENT_TYPE = Symbol.for("react.fragment");
+const exoticTypeCache = new WeakMap<object, unknown>();
 
 export function pushDeletion(fiber: Fiber): void {
   deletions.push(fiber);
@@ -61,8 +67,9 @@ export function renderFiber(vnode: VNode, container: Node): void {
 /** Process a single fiber: call component, diff children.
  *  Returns true if bailed out (children should be skipped). */
 function processWorkUnit(fiber: Fiber): boolean {
-  const isComponent = typeof fiber.type === "function";
-  const isFragment = fiber.type === Fragment;
+  const resolvedType = resolveExoticFiberType(fiber.type);
+  const isComponent = typeof resolvedType === "function";
+  const isFragment = fiber.type === Fragment || fiber.type === REACT_FRAGMENT_TYPE;
   const isPortal = fiber.type === Portal;
 
   if (isComponent) {
@@ -74,7 +81,7 @@ function processWorkUnit(fiber: Fiber): boolean {
     fiber._hookIndex = 0;
     if (!fiber.hooks) fiber.hooks = [];
 
-    const comp = fiber.type as (props: Props) => unknown;
+    const comp = resolvedType as (props: Props) => unknown;
     runBeforeComponentRenderHandlers(fiber);
     try {
       const children = normalizeRenderedChildren(comp(fiber.props));
@@ -104,6 +111,46 @@ function processWorkUnit(fiber: Fiber): boolean {
   }
 
   return false;
+}
+
+function resolveExoticFiberType(type: Fiber["type"]): unknown {
+  if (!type || type === "TEXT" || typeof type !== "object") {
+    return type;
+  }
+
+  const cached = exoticTypeCache.get(type as object);
+  if (cached) return cached;
+
+  const marker = (type as { $$typeof?: symbol }).$$typeof;
+
+  if (marker === REACT_MEMO_TYPE) {
+    const inner = (type as { type?: unknown }).type;
+    const resolved = inner == null ? type : resolveExoticFiberType(inner as Fiber["type"]);
+    exoticTypeCache.set(type as object, resolved);
+    return resolved;
+  }
+
+  if (marker === REACT_FORWARD_REF_TYPE && typeof (type as { render?: unknown }).render === "function") {
+    const render = (type as { render: (props: Props, ref: unknown) => unknown }).render;
+    const wrapped = (props: Props) => {
+      const { ref, ...rest } = props as Props & { ref?: unknown };
+      return render(rest, ref ?? null);
+    };
+    exoticTypeCache.set(type as object, wrapped);
+    return wrapped;
+  }
+
+  if (marker === REACT_CONTEXT_TYPE) {
+    const contextObject = type as object;
+    const wrapped = (props: Props) => {
+      setContextValue(contextObject, props.value);
+      return props.children ?? null;
+    };
+    exoticTypeCache.set(type as object, wrapped);
+    return wrapped;
+  }
+
+  return type;
 }
 
 /** Iterative depth-first work loop (avoids stack overflow on deep trees) */
@@ -160,7 +207,19 @@ function flattenRenderedChildren(raw: RenderedChild[]): VNode[] {
       result.push({ type: "TEXT", props: { nodeValue: String(child) }, key: null });
       continue;
     }
-    result.push(child);
+    if (typeof child === "object") {
+      const record = child as Record<string, unknown>;
+      if ("type" in record && "props" in record) {
+        const rawKey = record.key;
+        result.push({
+          type: record.type as VNode["type"],
+          props: (record.props && typeof record.props === "object")
+            ? record.props as Props
+            : {},
+          key: typeof rawKey === "string" || typeof rawKey === "number" ? rawKey : null,
+        });
+      }
+    }
   }
   return result;
 }

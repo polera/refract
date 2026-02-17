@@ -20,7 +20,7 @@ function createFiber(
   if (oldFiber && oldFiber.type === child.type) {
     return {
       type: oldFiber.type,
-      props: child.props,
+      props: child.props ?? {},
       key: child.key,
       dom: oldFiber.dom,
       parentDom: parentFiber.dom ?? parentFiber.parentDom,
@@ -34,7 +34,7 @@ function createFiber(
   }
   return {
     type: child.type,
-    props: child.props,
+    props: child.props ?? {},
     key: child.key,
     dom: null,
     parentDom: parentFiber.dom ?? parentFiber.parentDom,

@@ -91,17 +91,19 @@ function isSvgContext(fiber: Fiber): boolean {
 
 /** Apply props to a DOM element, diffing against old props */
 export function applyProps(
-  el: HTMLElement,
+  el: Element,
   oldProps: Record<string, unknown>,
   newProps: Record<string, unknown>,
 ): void {
+  const isSvgElement = el.namespaceURI === SVG_NS;
+
   for (const key of Object.keys(oldProps)) {
     if (key === "children" || key === "key" || key === "ref") continue;
     if (!(key in newProps)) {
       if (key.startsWith("on")) {
         el.removeEventListener(key.slice(2).toLowerCase(), getEventListener(oldProps[key]));
       } else {
-        el.removeAttribute(key);
+        el.removeAttribute(normalizeAttributeName(key, isSvgElement));
       }
     }
   }
@@ -134,11 +136,11 @@ export function applyProps(
           const styles = newProps[key] as Record<string, unknown>;
           for (const prop of Object.keys(prevStyles)) {
             if (!(prop in styles)) {
-              (el.style as unknown as Record<string, string>)[prop] = "";
+              (el as HTMLElement).style[prop as any] = "";
             }
           }
           for (const [prop, val] of Object.entries(styles)) {
-            (el.style as unknown as Record<string, string>)[prop] = val == null ? "" : String(val);
+            (el as HTMLElement).style[prop as any] = val == null ? "" : String(val);
           }
         } else {
           el.removeAttribute("style");
@@ -165,19 +167,37 @@ export function applyProps(
           el.addEventListener(event, getEventListener(newProps[key]));
         } else {
           const value = newProps[key];
+          const attrName = normalizeAttributeName(key, isSvgElement);
           if (unsafeUrlPropChecker(key, value)) {
-            el.removeAttribute(key);
+            el.removeAttribute(attrName);
             continue;
           }
           if (value == null || value === false) {
-            el.removeAttribute(key);
+            el.removeAttribute(attrName);
           } else if (value === true) {
-            el.setAttribute(key, "true");
+            el.setAttribute(attrName, "true");
           } else {
-            el.setAttribute(key, String(value));
+            el.setAttribute(attrName, String(value));
           }
         }
         break;
     }
   }
 }
+
+function normalizeAttributeName(key: string, isSvgElement: boolean): string {
+  if (!isSvgElement) return key;
+  if (key === "xlinkHref") return "xlink:href";
+  if (key === "xmlnsXlink") return "xmlns:xlink";
+  if (key === "xmlSpace") return "xml:space";
+  if (key === "xmlLang") return "xml:lang";
+  if (key === "xmlBase") return "xml:base";
+  if (SVG_ATTR_CASE_PRESERVED.has(key)) return key;
+  if (key.startsWith("aria-") || key.startsWith("data-")) return key;
+  return key.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
+}
+
+const SVG_ATTR_CASE_PRESERVED = new Set([
+  "viewBox",
+  "preserveAspectRatio",
+]);
