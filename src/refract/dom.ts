@@ -1,6 +1,9 @@
 import type { Fiber } from "./types.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
+const XLINK_NS = "http://www.w3.org/1999/xlink";
+const XML_NS = "http://www.w3.org/XML/1998/namespace";
+const XMLNS_NS = "http://www.w3.org/2000/xmlns/";
 const SVG_TAGS = new Set([
   "svg", "circle", "ellipse", "line", "path", "polygon", "polyline",
   "rect", "g", "defs", "use", "text", "tspan", "image", "clipPath",
@@ -103,7 +106,12 @@ export function applyProps(
       if (key.startsWith("on")) {
         el.removeEventListener(key.slice(2).toLowerCase(), getEventListener(oldProps[key]));
       } else {
-        el.removeAttribute(normalizeAttributeName(key, isSvgElement));
+        const attr = normalizeAttributeName(key, isSvgElement);
+        if (attr.namespaceURI) {
+          el.removeAttributeNS(attr.namespaceURI, attr.localName);
+        } else {
+          el.removeAttribute(attr.name);
+        }
       }
     }
   }
@@ -167,17 +175,34 @@ export function applyProps(
           el.addEventListener(event, getEventListener(newProps[key]));
         } else {
           const value = newProps[key];
-          const attrName = normalizeAttributeName(key, isSvgElement);
-          if (unsafeUrlPropChecker(key, value)) {
-            el.removeAttribute(attrName);
+          const attr = normalizeAttributeName(key, isSvgElement);
+          const securityKey = isSvgElement ? attr.name : key;
+          if (unsafeUrlPropChecker(securityKey, value)) {
+            if (attr.namespaceURI) {
+              el.removeAttributeNS(attr.namespaceURI, attr.localName);
+            } else {
+              el.removeAttribute(attr.name);
+            }
             continue;
           }
           if (value == null || value === false) {
-            el.removeAttribute(attrName);
+            if (attr.namespaceURI) {
+              el.removeAttributeNS(attr.namespaceURI, attr.localName);
+            } else {
+              el.removeAttribute(attr.name);
+            }
           } else if (value === true) {
-            el.setAttribute(attrName, "true");
+            if (attr.namespaceURI) {
+              el.setAttributeNS(attr.namespaceURI, attr.name, "true");
+            } else {
+              el.setAttribute(attr.name, "true");
+            }
           } else {
-            el.setAttribute(attrName, String(value));
+            if (attr.namespaceURI) {
+              el.setAttributeNS(attr.namespaceURI, attr.name, String(value));
+            } else {
+              el.setAttribute(attr.name, String(value));
+            }
           }
         }
         break;
@@ -185,19 +210,114 @@ export function applyProps(
   }
 }
 
-function normalizeAttributeName(key: string, isSvgElement: boolean): string {
-  if (!isSvgElement) return key;
-  if (key === "xlinkHref") return "xlink:href";
-  if (key === "xmlnsXlink") return "xmlns:xlink";
-  if (key === "xmlSpace") return "xml:space";
-  if (key === "xmlLang") return "xml:lang";
-  if (key === "xmlBase") return "xml:base";
-  if (SVG_ATTR_CASE_PRESERVED.has(key)) return key;
-  if (key.startsWith("aria-") || key.startsWith("data-")) return key;
-  return key.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
+type NormalizedAttribute = {
+  name: string;
+  localName: string;
+  namespaceURI: string | null;
+};
+
+function normalizeAttributeName(key: string, isSvgElement: boolean): NormalizedAttribute {
+  if (!isSvgElement) {
+    return { name: key, localName: key, namespaceURI: null };
+  }
+
+  if (key.startsWith("xlink") && key.length > 5) {
+    const local = key.slice(5);
+    const localName = local.charAt(0).toLowerCase() + local.slice(1);
+    return { name: `xlink:${localName.toLowerCase()}`, localName: localName.toLowerCase(), namespaceURI: XLINK_NS };
+  }
+
+  if (key === "xmlnsXlink") {
+    return { name: "xmlns:xlink", localName: "xlink", namespaceURI: XMLNS_NS };
+  }
+
+  if (key.startsWith("xml") && key.length > 3) {
+    const local = key.slice(3);
+    const localName = local.charAt(0).toLowerCase() + local.slice(1);
+    return { name: `xml:${localName}`, localName, namespaceURI: XML_NS };
+  }
+
+  if (SVG_ATTR_CASE_PRESERVED.has(key) || key.startsWith("aria-") || key.startsWith("data-")) {
+    return { name: key, localName: key, namespaceURI: null };
+  }
+
+  if (SVG_ATTR_KEBAB_CASE.has(key)) {
+    const name = key.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
+    return { name, localName: name, namespaceURI: null };
+  }
+
+  return { name: key, localName: key, namespaceURI: null };
 }
 
 const SVG_ATTR_CASE_PRESERVED = new Set([
   "viewBox",
   "preserveAspectRatio",
+  "gradientUnits",
+  "gradientTransform",
+  "patternUnits",
+  "patternContentUnits",
+  "patternTransform",
+  "maskUnits",
+  "maskContentUnits",
+  "filterUnits",
+  "primitiveUnits",
+  "pointsAtX",
+  "pointsAtY",
+  "pointsAtZ",
+  "markerUnits",
+  "markerWidth",
+  "markerHeight",
+  "refX",
+  "refY",
+  "stdDeviation",
+]);
+
+const SVG_ATTR_KEBAB_CASE = new Set([
+  "clipPath",
+  "clipRule",
+  "fillOpacity",
+  "fillRule",
+  "floodColor",
+  "floodOpacity",
+  "strokeDasharray",
+  "strokeDashoffset",
+  "strokeLinecap",
+  "strokeLinejoin",
+  "strokeMiterlimit",
+  "strokeOpacity",
+  "strokeWidth",
+  "stopColor",
+  "stopOpacity",
+  "fontFamily",
+  "fontSize",
+  "fontSizeAdjust",
+  "fontStretch",
+  "fontStyle",
+  "fontVariant",
+  "fontWeight",
+  "glyphOrientationHorizontal",
+  "glyphOrientationVertical",
+  "letterSpacing",
+  "wordSpacing",
+  "textAnchor",
+  "textDecoration",
+  "textRendering",
+  "dominantBaseline",
+  "alignmentBaseline",
+  "baselineShift",
+  "colorInterpolation",
+  "colorInterpolationFilters",
+  "colorProfile",
+  "colorRendering",
+  "imageRendering",
+  "shapeRendering",
+  "pointerEvents",
+  "lightingColor",
+  "unicodeBidi",
+  "renderingIntent",
+  "vectorEffect",
+  "writingMode",
+  "markerStart",
+  "markerMid",
+  "markerEnd",
 ]);
