@@ -80,6 +80,20 @@ describe("render", () => {
     expect(link.getAttribute("href")).toBe("https://example.com");
   });
 
+  it("blocks javascript: URLs on SVG xlinkHref", () => {
+    render(
+      createElement(
+        "svg",
+        null,
+        createElement("use", { xlinkHref: "javascript:alert('xss')" }),
+      ),
+      container,
+    );
+
+    const use = container.querySelector("use")!;
+    expect(use.getAttribute("xlink:href")).toBeNull();
+  });
+
   it("normalizes camelCase SVG attributes used by chart paths", () => {
     const vnode = createElement(
       "svg",
@@ -119,5 +133,23 @@ describe("render", () => {
 
     const use = container.querySelector("use")!;
     expect(use.getAttribute("xlink:href")).toBe("#slice");
+  });
+
+  it("preserves camelCase SVG attributes that are not hyphenated in SVG", () => {
+    const vnode = createElement(
+      "svg",
+      null,
+      createElement(
+        "linearGradient",
+        { id: "g", gradientUnits: "userSpaceOnUse", gradientTransform: "rotate(25)" },
+      ),
+    );
+    render(vnode, container);
+
+    const gradient = container.querySelector("linearGradient")!;
+    expect(gradient.getAttribute("gradientUnits")).toBe("userSpaceOnUse");
+    expect(gradient.getAttribute("gradientTransform")).toBe("rotate(25)");
+    expect(gradient.getAttribute("gradient-units")).toBeNull();
+    expect(gradient.getAttribute("gradient-transform")).toBeNull();
   });
 });
