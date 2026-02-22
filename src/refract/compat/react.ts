@@ -91,11 +91,13 @@ function childrenToArray(children: unknown): unknown[] {
   if (children === undefined || children === null) return [];
   if (!Array.isArray(children)) return [children];
   const out: unknown[] = [];
-  const stack = [...children];
+  const stack: unknown[] = [children];
   while (stack.length > 0) {
-    const child = stack.shift();
+    const child = stack.pop();
     if (Array.isArray(child)) {
-      stack.unshift(...child);
+      for (let i = child.length - 1; i >= 0; i--) {
+        stack.push(child[i]);
+      }
       continue;
     }
     if (child === undefined || child === null || typeof child === "boolean") {

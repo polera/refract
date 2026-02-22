@@ -107,6 +107,7 @@ const secretInternals: ReactSecretInternalsCompat = {
 const externalClientInternals = new Set<ReactClientInternalsCompat>();
 const externalSecretInternals = new Set<ReactSecretInternalsCompat>();
 const dispatcherStack: (RefractHookDispatcher | null)[] = [];
+const MAX_EXTERNAL_INTERNALS = 8;
 
 let runtimeInitialized = false;
 
@@ -135,7 +136,7 @@ export function registerExternalReactModule(moduleValue: unknown): void {
 
   const candidateClient = moduleRecord.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
   if (candidateClient && typeof candidateClient === "object" && "H" in (candidateClient as Record<string, unknown>)) {
-    externalClientInternals.add(candidateClient as ReactClientInternalsCompat);
+    addBoundedInternal(externalClientInternals, candidateClient as ReactClientInternalsCompat);
   }
 
   const candidateSecret = moduleRecord.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
@@ -147,10 +148,21 @@ export function registerExternalReactModule(moduleValue: unknown): void {
     && typeof dispatcherHolder.ReactCurrentDispatcher === "object"
     && "current" in (dispatcherHolder.ReactCurrentDispatcher as Record<string, unknown>)
   ) {
-    externalSecretInternals.add(candidateSecret as ReactSecretInternalsCompat);
+    addBoundedInternal(externalSecretInternals, candidateSecret as ReactSecretInternalsCompat);
   }
 
   syncDispatcherToExternal();
+}
+
+function addBoundedInternal<T>(set: Set<T>, value: T): void {
+  if (set.has(value)) return;
+  if (set.size >= MAX_EXTERNAL_INTERNALS) {
+    const oldest = set.values().next().value as T | undefined;
+    if (oldest !== undefined) {
+      set.delete(oldest);
+    }
+  }
+  set.add(value);
 }
 
 function beforeComponentRender(): void {

@@ -71,6 +71,25 @@ describe("hooks", () => {
       expect(renderCount).toBe(2);
       expect(container.querySelector("span")!.textContent).toBe("3");
     });
+
+    it("ignores setState after unmount", async () => {
+      let setCount!: (v: number | ((p: number) => number)) => void;
+      let renders = 0;
+      function Counter() {
+        const [count, sc] = useState(0);
+        setCount = sc;
+        renders++;
+        return createElement("span", null, String(count));
+      }
+
+      render(createElement(Counter, null), container);
+      render(createElement("div", null, "gone"), container);
+
+      expect(() => setCount(1)).not.toThrow();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(container.textContent).toBe("gone");
+      expect(renders).toBe(1);
+    });
   });
 
   describe("useEffect", () => {
@@ -268,6 +287,70 @@ describe("hooks", () => {
       dispatch({ type: "dec" });
       await new Promise((r) => setTimeout(r, 10));
       expect(container.querySelector("span")!.textContent).toBe("2");
+    });
+
+    it("ignores dispatch after unmount", async () => {
+      type Action = { type: "inc" };
+      let dispatch!: (action: Action) => void;
+      let renders = 0;
+      function Counter() {
+        const [count, d] = useReducer((state: number, action: Action) => {
+          if (action.type === "inc") return state + 1;
+          return state;
+        }, 0);
+        dispatch = d;
+        renders++;
+        return createElement("span", null, String(count));
+      }
+
+      render(createElement(Counter, null), container);
+      render(createElement("div", null, "gone"), container);
+
+      expect(() => dispatch({ type: "inc" })).not.toThrow();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(container.textContent).toBe("gone");
+      expect(renders).toBe(1);
+    });
+  });
+
+  describe("cleanup scoping", () => {
+    it("only cleans up deleted subtree effects", async () => {
+      const leftCleanup = vi.fn();
+      const rightCleanup = vi.fn();
+      let setShowLeft!: (v: boolean) => void;
+
+      function Left() {
+        useEffect(() => leftCleanup, []);
+        return createElement("span", null, "left");
+      }
+
+      function Right() {
+        useEffect(() => rightCleanup, []);
+        return createElement("span", null, "right");
+      }
+
+      function App() {
+        const [showLeft, ss] = useState(true);
+        setShowLeft = ss;
+        return createElement(
+          "div",
+          null,
+          showLeft ? createElement(Left, { key: "left" }) : null,
+          createElement(Right, { key: "right" }),
+        );
+      }
+
+      render(createElement(App, null), container);
+      flushPassiveEffects();
+      expect(leftCleanup).toHaveBeenCalledTimes(0);
+      expect(rightCleanup).toHaveBeenCalledTimes(0);
+
+      setShowLeft(false);
+      await new Promise((r) => setTimeout(r, 10));
+      flushPassiveEffects();
+
+      expect(leftCleanup).toHaveBeenCalledTimes(1);
+      expect(rightCleanup).toHaveBeenCalledTimes(0);
     });
   });
 });
