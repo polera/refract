@@ -54,8 +54,12 @@ export function renderFiber(vnode: VNode, container: Node): void {
   };
   deletions = [];
   isRendering = true;
-  performWork(rootFiber);
-  isRendering = false;
+  try {
+    performWork(rootFiber);
+  } finally {
+    isRendering = false;
+    currentFiber = null;
+  }
   const committedDeletions = deletions.slice();
   commitRoot(rootFiber);
   clearAlternates(rootFiber);
@@ -90,6 +94,7 @@ function processWorkUnit(fiber: Fiber): boolean {
       if (!tryHandleRenderError(fiber, error)) throw error;
     } finally {
       runAfterComponentRenderHandlers(fiber);
+      currentFiber = null;
     }
   } else if (isFragment) {
     reconcileChildren(fiber, normalizeChildrenProp(fiber.props.children));
@@ -254,33 +259,57 @@ function getNextDomSibling(fiber: Fiber): Node | null {
 /** Collect all DOM nodes from a component/fragment fiber's subtree */
 function collectChildDomNodes(fiber: Fiber): Node[] {
   const nodes: Node[] = [];
-  function walk(f: Fiber | null): void {
-    while (f) {
-      if (isPortalFiber(f)) {
-        f = f.sibling;
-        continue;
-      }
-      if (f.dom) {
-        nodes.push(f.dom);
-      } else {
-        walk(f.child);
-      }
-      f = f.sibling;
+  const stack: Fiber[] = [];
+  const rootChildren: Fiber[] = [];
+  let child = fiber.child;
+  while (child) {
+    rootChildren.push(child);
+    child = child.sibling;
+  }
+  for (let i = rootChildren.length - 1; i >= 0; i--) {
+    stack.push(rootChildren[i]);
+  }
+
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (isPortalFiber(current)) {
+      continue;
+    }
+    if (current.dom) {
+      nodes.push(current.dom);
+      continue;
+    }
+    const children: Fiber[] = [];
+    let next = current.child;
+    while (next) {
+      children.push(next);
+      next = next.sibling;
+    }
+    for (let i = children.length - 1; i >= 0; i--) {
+      stack.push(children[i]);
     }
   }
-  walk(fiber.child);
   return nodes;
 }
 
 /** Get the first committed DOM node in a fiber subtree */
 function getFirstCommittedDom(fiber: Fiber): Node | null {
-  if (isPortalFiber(fiber)) return null;
-  if (fiber.dom && !(fiber.flags & PLACEMENT)) return fiber.dom;
-  let child = fiber.child;
-  while (child) {
-    const dom = getFirstCommittedDom(child);
-    if (dom) return dom;
-    child = child.sibling;
+  const stack: Fiber[] = [fiber];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (isPortalFiber(current)) continue;
+    if (current.dom && !(current.flags & PLACEMENT)) {
+      return current.dom;
+    }
+    const children: Fiber[] = [];
+    let child = current.child;
+    while (child) {
+      children.push(child);
+      child = child.sibling;
+    }
+    for (let i = children.length - 1; i >= 0; i--) {
+      stack.push(children[i]);
+    }
   }
   return null;
 }
@@ -296,69 +325,74 @@ function commitRoot(rootFiber: Fiber): void {
 }
 
 function commitWork(fiber: Fiber): void {
-  if (isPortalFiber(fiber)) {
-    fiber.flags = 0;
-    if (fiber.child) commitWork(fiber.child);
-    if (fiber.sibling) commitWork(fiber.sibling);
-    return;
-  }
+  const stack: Fiber[] = [fiber];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (isPortalFiber(current)) {
+      current.flags = 0;
+      if (current.sibling) stack.push(current.sibling);
+      if (current.child) stack.push(current.child);
+      continue;
+    }
 
-  let parentFiber = fiber.parent;
-  while (parentFiber && !parentFiber.dom) {
-    parentFiber = parentFiber.parent;
-  }
-  const parentDom = parentFiber!.dom!;
+    let parentFiber = current.parent;
+    while (parentFiber && !parentFiber.dom) {
+      parentFiber = parentFiber.parent;
+    }
+    const parentDom = parentFiber?.dom;
 
-  if (fiber.flags & PLACEMENT) {
-    if (fiber.dom) {
-      const before = getNextDomSibling(fiber);
-      if (before) {
-        parentDom.insertBefore(fiber.dom, before);
-      } else {
-        parentDom.appendChild(fiber.dom);
-      }
-    } else {
-      // Component/fragment: move all child DOM nodes
-      const domNodes = collectChildDomNodes(fiber);
-      const before = getNextDomSibling(fiber);
-      for (const dom of domNodes) {
-        if (before) {
-          parentDom.insertBefore(dom, before);
+    if (parentDom) {
+      if (current.flags & PLACEMENT) {
+        if (current.dom) {
+          const before = getNextDomSibling(current);
+          if (before) {
+            parentDom.insertBefore(current.dom, before);
+          } else {
+            parentDom.appendChild(current.dom);
+          }
         } else {
-          parentDom.appendChild(dom);
+          // Component/fragment: move all child DOM nodes
+          const domNodes = collectChildDomNodes(current);
+          const before = getNextDomSibling(current);
+          for (const dom of domNodes) {
+            if (before) {
+              parentDom.insertBefore(dom, before);
+            } else {
+              parentDom.appendChild(dom);
+            }
+          }
+        }
+      } else if (current.flags & UPDATE && current.dom) {
+        if (current.type === "TEXT") {
+          const oldValue = current.alternate?.props.nodeValue;
+          if (oldValue !== current.props.nodeValue) {
+            current.dom.textContent = current.props.nodeValue as string;
+          }
+        } else {
+          applyProps(
+            current.dom as HTMLElement,
+            current.alternate?.props ?? {},
+            current.props,
+          );
         }
       }
     }
-  } else if (fiber.flags & UPDATE && fiber.dom) {
-    if (fiber.type === "TEXT") {
-      const oldValue = fiber.alternate?.props.nodeValue;
-      if (oldValue !== fiber.props.nodeValue) {
-        fiber.dom.textContent = fiber.props.nodeValue as string;
+
+    // Handle ref prop — only on mount or when ref changes (like React)
+    if (current.dom && current.props.ref) {
+      const oldRef = current.alternate?.props.ref;
+      if (current.flags & PLACEMENT || current.props.ref !== oldRef) {
+        if (oldRef && oldRef !== current.props.ref) {
+          setRef(oldRef, null);
+        }
+        setRef(current.props.ref, current.dom);
       }
-    } else {
-      applyProps(
-        fiber.dom as HTMLElement,
-        fiber.alternate?.props ?? {},
-        fiber.props,
-      );
     }
+
+    current.flags = 0;
+    if (current.sibling) stack.push(current.sibling);
+    if (current.child) stack.push(current.child);
   }
-
-  // Handle ref prop — only on mount or when ref changes (like React)
-  if (fiber.dom && fiber.props.ref) {
-    const oldRef = fiber.alternate?.props.ref;
-    if (fiber.flags & PLACEMENT || fiber.props.ref !== oldRef) {
-      if (oldRef && oldRef !== fiber.props.ref) {
-        setRef(oldRef, null);
-      }
-      setRef(fiber.props.ref, fiber.dom);
-    }
-  }
-
-  fiber.flags = 0;
-
-  if (fiber.child) commitWork(fiber.child);
-  if (fiber.sibling) commitWork(fiber.sibling);
 }
 
 function setRef(ref: unknown, value: Node | null): void {
@@ -373,41 +407,51 @@ function setRef(ref: unknown, value: Node | null): void {
  *  Alternates are only needed during reconciliation; retaining them
  *  creates an ever-growing chain of old fiber trees. */
 function clearAlternates(fiber: Fiber | null): void {
-  while (fiber) {
-    fiber.alternate = null;
-    if (fiber.child) clearAlternates(fiber.child);
-    fiber = fiber.sibling;
+  if (!fiber) return;
+  const stack: Fiber[] = [fiber];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    current.alternate = null;
+    if (current.sibling) stack.push(current.sibling);
+    if (current.child) stack.push(current.child);
   }
 }
 
 function commitDeletion(fiber: Fiber): void {
   runCleanups(fiber);
-  // Clear ref on unmount
-  if (fiber.dom && fiber.props.ref) {
-    setRef(fiber.props.ref, null);
-  }
-  if (isPortalFiber(fiber)) {
-    let child: Fiber | null = fiber.child;
-    while (child) {
-      commitDeletion(child);
-      child = child.sibling;
+  walkSubtree(fiber, (node) => {
+    if (node.dom && node.props.ref) {
+      setRef(node.props.ref, null);
     }
-  } else if (fiber.dom) {
-    fiber.dom.parentNode?.removeChild(fiber.dom);
-  } else if (fiber.child) {
-    // Fragment/component — delete children
-    let child: Fiber | null = fiber.child;
-    while (child) {
-      commitDeletion(child);
-      child = child.sibling;
+  });
+  walkSubtree(fiber, (node) => {
+    if (!isPortalFiber(node) && node.dom) {
+      node.dom.parentNode?.removeChild(node.dom);
     }
-  }
+  });
 }
 
 function runCleanups(fiber: Fiber): void {
-  runFiberCleanupHandlers(fiber);
-  if (fiber.child) runCleanups(fiber.child);
-  if (fiber.sibling) runCleanups(fiber.sibling);
+  walkSubtree(fiber, (node) => {
+    runFiberCleanupHandlers(node);
+  });
+}
+
+function walkSubtree(root: Fiber, visit: (fiber: Fiber) => void): void {
+  const stack: Fiber[] = [root];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    visit(current);
+    const children: Fiber[] = [];
+    let child = current.child;
+    while (child) {
+      children.push(child);
+      child = child.sibling;
+    }
+    for (let i = children.length - 1; i >= 0; i--) {
+      stack.push(children[i]);
+    }
+  }
 }
 
 const pendingContainers = new Set<Node>();
@@ -473,8 +517,12 @@ function flushRenders(): void {
       };
       deletions = [];
       isRendering = true;
-      performWork(newRoot);
-      isRendering = false;
+      try {
+        performWork(newRoot);
+      } finally {
+        isRendering = false;
+        currentFiber = null;
+      }
       const committedDeletions = deletions.slice();
       commitRoot(newRoot);
       clearAlternates(newRoot);

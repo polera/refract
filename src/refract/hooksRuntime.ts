@@ -33,6 +33,8 @@ function cleanupFiberEffects(fiber: Fiber): void {
   if (!fiber.hooks) return;
 
   for (const hook of fiber.hooks) {
+    hook.queue = undefined;
+    hook._fiber = undefined;
     const state = hook.state;
     if (!state || typeof state !== "object") continue;
     const effectState = state as { cleanup?: () => void; pending?: boolean };

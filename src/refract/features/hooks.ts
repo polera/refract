@@ -36,9 +36,11 @@ export function useState<T>(initial: T | (() => T)): [T, (value: T | ((prev: T) 
   // Create a stable setter that is reused across renders (like React)
   if (!hook._setter) {
     hook._setter = (value: T | ((prev: T) => T)) => {
+      if (!hook._fiber) return;
       const action = typeof value === "function"
         ? value as (prev: T) => T
         : () => value;
+      if (!hook.queue) hook.queue = [];
       (hook.queue as ((prev: T) => T)[]).push(action);
       scheduleRender(hook._fiber!);
     };
@@ -191,6 +193,8 @@ export function useReducer<S, A, I>(
   // Create stable dispatch (like React)
   if (!hook._dispatch) {
     hook._dispatch = (action: A) => {
+      if (!hook._fiber) return;
+      if (!hook.queue) hook.queue = [];
       (hook.queue as A[]).push(action);
       scheduleRender(hook._fiber!);
     };
