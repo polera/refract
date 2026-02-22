@@ -1,6 +1,8 @@
 ![](assets/lens-syntax-refract.svg "=x200")
 
-# Refract
+[Info](https://refract.ipx.dev) | [Docs](https://refract.ipx.dev/docs)
+
+# Refract 
 
 A minimal React-like virtual DOM library, written in TypeScript with split entrypoints
 so you can keep bundles small and targeted.
@@ -94,9 +96,13 @@ Supported compat APIs include:
 - `forwardRef`, `cloneElement`, `Children`, `isValidElement`
 - `useLayoutEffect`, `useInsertionEffect`, `useId`
 - `useSyncExternalStore`, `useImperativeHandle`
+- `use` — suspends on Promise (with a `promiseCache` WeakMap) or reads a context object
+- `Suspense` — renders a fallback subtree while a child suspends
 - `createPortal`
 - `createRoot`, `flushSync`, `unstable_batchedUpdates`
+- `findDOMNode` stub (returns `null`; prevents crashes from libraries like `react-transition-group` v4)
 - `jsx/jsxs/jsxDEV` runtime entrypoints
+- `$$typeof` stamped on every VNode (`Symbol.for("react.element")`) so `react-is` helpers work
 - React hook dispatcher bridge internals (`__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE`) with optional `registerExternalReactModule(...)` for mixed-runtime environments (tests/Node)
 
 Example Vite aliases:
@@ -121,10 +127,10 @@ export default defineConfig({
 The compat layer is intentionally separate from core so users who do not need
 React ecosystem compatibility keep the smallest and fastest Refract bundles.
 
-Compatibility status (last verified February 17, 2026):
-- `yarn test`: 14 files passed, 85 tests passed
+Compatibility status (last verified February 22, 2026):
+- `yarn test`: 14 files passed, 91 tests passed
 - Compat-focused suites passed: `tests/compat.test.ts` (10), `tests/poc-compat.test.ts` (2), `tests/react-router-smoke.test.ts` (3)
-- Verified behaviors include `forwardRef`, portals, `createRoot`, JSX runtimes, `useSyncExternalStore`, `flushSync`, and react-router tree construction/dispatcher bridging
+- Verified behaviors include `forwardRef`, portals, `createRoot`, JSX runtimes, `useSyncExternalStore`, `flushSync`, react-router tree construction/dispatcher bridging, `React.use` (Promise + context), and Suspense boundary fallback rendering
 
 ## API
 
@@ -318,6 +324,7 @@ How Refract compares to React and Preact:
 | useId                          | Yes     | Yes   | Yes    |
 | useSyncExternalStore           | Yes     | Yes   | Yes    |
 | useImperativeHandle            | Yes     | Yes   | Yes    |
+| use                            | Yes⁶    | Yes   | No     |
 | useTransition / useDeferredValue | Partial⁵ | Yes | Partial⁷ |
 | **State & Data Flow**          |         |       |        |
 | Built-in state management      | Yes     | Yes   | Yes    |
@@ -330,7 +337,7 @@ How Refract compares to React and Preact:
 | className prop                 | Yes     | Yes   | Yes¹   |
 | dangerouslySetInnerHTML        | Yes     | Yes   | Yes    |
 | Portals                        | Yes     | Yes   | Yes    |
-| Suspense / lazy                | No⁸     | Yes   | Yes²   |
+| Suspense / lazy                | Partial⁸ | Yes  | Yes²   |
 | Error boundaries               | Yes³    | Yes   | Yes    |
 | Server-side rendering          | No      | Yes   | Yes    |
 | Hydration                      | No⁹     | Yes   | Yes    |
@@ -354,7 +361,7 @@ How Refract compares to React and Preact:
 ⁵ Refract exposes `useTransition` / `useDeferredValue` but currently runs both synchronously (no concurrent scheduling).
 ⁶ Available via opt-in compat entrypoints (`refract/compat/react*`) with partial React API parity.
 ⁷ Preact compatibility is provided through `preact/compat`.
-⁸ Compat exports `Suspense`/`lazy`, but full suspension/fallback semantics are not implemented.
+⁸ Compat `Suspense` renders a fallback while a child suspends (via `React.use` + `useState` boundary). `lazy` is exported but code-splitting semantics are limited.
 ⁹ `hydrateRoot` is exposed in compat, but currently performs client render rather than true SSR hydration.
 ¹⁰ `memo` is supported; `PureComponent` is compat-oriented and does not guarantee full React shallow-compare behavior.
 
