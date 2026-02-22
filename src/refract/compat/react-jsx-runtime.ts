@@ -2,6 +2,8 @@ import { createElement, Fragment } from "../createElement.js";
 import type { VNode, VNodeType } from "../types.js";
 import { resolveCompatType, getWrappedHandler } from "./react.js";
 
+const REACT_ELEMENT_TYPE = Symbol.for("react.element");
+
 type JsxProps = Record<string, unknown> | null | undefined;
 type JsxChild = VNode | string | number | boolean | null | undefined | JsxChild[];
 
@@ -45,6 +47,7 @@ function createJsxElement(type: VNodeType, rawProps: JsxProps, key?: string): Re
   } else {
     vnode = createElement(effectiveType as VNodeType, props, children as JsxChild);
   }
+  (vnode as any).$$typeof = REACT_ELEMENT_TYPE;
   return normalizeVNodeChildren(vnode);
 }
 

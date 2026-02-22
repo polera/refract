@@ -208,7 +208,7 @@ function flattenRenderedChildren(raw: RenderedChild[]): VNode[] {
       continue;
     }
     if (typeof child === "object") {
-      const record = child as Record<string, unknown>;
+      const record = child as unknown as Record<string, unknown>;
       if ("type" in record && "props" in record) {
         const rawKey = record.key;
         result.push({

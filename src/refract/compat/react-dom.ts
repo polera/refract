@@ -16,6 +16,14 @@ export function unstable_batchedUpdates<T>(callback: () => T): T {
   return callback();
 }
 
+// findDOMNode was removed in React 19. react-transition-group v4 calls it
+// when no nodeRef prop is provided. Returning null avoids a hard crash; any
+// guarded usage (if node) degrades gracefully while unguarded usage (e.g.
+// CSSTransition without nodeRef) will silently skip the animation.
+export function findDOMNode(_instance: unknown): Element | null {
+  return null;
+}
+
 export function flushSync<T>(callback: () => T): T {
   const result = callback();
   flushPendingRenders();
@@ -34,6 +42,7 @@ export function unmountComponentAtNode(container: HTMLElement): boolean {
 
 const ReactDomCompat = {
   createPortal,
+  findDOMNode,
   flushSync,
   render: renderCompat,
   unstable_batchedUpdates,

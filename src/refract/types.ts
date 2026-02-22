@@ -48,6 +48,7 @@ export interface Fiber {
   _contexts?: Map<number, unknown>;
   _objectContexts?: Map<object, unknown>;
   _errorHandler?: (error: unknown) => void;
+  _suspenseHandler?: (promise: Promise<unknown>) => void;
   alternate: Fiber | null;
   flags: number;
 }

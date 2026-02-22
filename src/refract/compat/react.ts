@@ -1,10 +1,11 @@
-import { createElement as createElementImpl, Fragment } from "../createElement.js";
+import { createElement as createElementImpl, Fragment as InternalFragment } from "../createElement.js";
 import { memo } from "../memo.js";
 import { createContext as createContextImpl, setContextValue } from "../features/context.js";
 import {
   createRef,
   useErrorBoundary,
 } from "../features/hooks.js";
+import { currentFiber } from "../coreRenderer.js";
 import type { Component as RefractComponent, Props, VNode } from "../types.js";
 import {
   __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE,
@@ -41,6 +42,9 @@ export function forwardRef<T, P extends Record<string, unknown> = Record<string,
     return render(rest as unknown as P, ref ?? null);
   };
   (ForwardRefComponent as any).displayName = `ForwardRef(${(render as any).name || 'anonymous'})`;
+  // Stamp $$typeof so react-is.isForwardRef(element) works when this component
+  // is used as the VNode type.
+  (ForwardRefComponent as any).$$typeof = REACT_FORWARD_REF_TYPE;
   return ForwardRefComponent;
 }
 
@@ -269,7 +273,54 @@ PureComponent.prototype.isPureReactComponent = true;
 // Suspense / Lazy
 // ---------------------------------------------------------------------------
 
+// Cache for promises passed to use() — maps a Promise to its settled result
+// so subsequent renders can return the value instead of throwing again.
+type PromiseResult<T> =
+  | { status: 'pending' }
+  | { status: 'fulfilled'; value: T }
+  | { status: 'rejected'; reason: unknown };
+
+const promiseCache = new WeakMap<Promise<unknown>, PromiseResult<unknown>>();
+
+export function use<T>(value: Promise<T> | unknown): T {
+  if (value instanceof Promise) {
+    let result = promiseCache.get(value as Promise<unknown>) as PromiseResult<T> | undefined;
+    if (!result) {
+      result = { status: 'pending' };
+      promiseCache.set(value as Promise<unknown>, result as PromiseResult<unknown>);
+      (value as Promise<T>).then(
+        (v) => { (result as any).status = 'fulfilled'; (result as any).value = v; },
+        (e) => { (result as any).status = 'rejected'; (result as any).reason = e; },
+      );
+    }
+    if (result.status === 'fulfilled') return (result as { status: 'fulfilled'; value: T }).value;
+    if (result.status === 'rejected') throw (result as { status: 'rejected'; reason: unknown }).reason;
+    throw value; // pending — triggers Suspense boundary
+  }
+  // Treat non-Promise values as context objects (React 19 use(Context) pattern).
+  return useContext(value as unknown) as T;
+}
+
+// Suspense is a real component so it can use useState to toggle between the
+// fallback and live children, and so the renderer can attach a
+// _suspenseHandler to its fiber for thrown-promise recovery.
 export function Suspense(props: { children?: unknown; fallback?: unknown }): unknown {
+  const [suspended, setSuspended] = useState(false);
+
+  // Register the promise handler on this render's fiber so that any
+  // descendant that throws a Promise can find and invoke it.
+  const fiber = currentFiber;
+  if (fiber) {
+    fiber._suspenseHandler = (promise: Promise<unknown>) => {
+      setSuspended(true);
+      promise.then(
+        () => setSuspended(false),
+        () => setSuspended(false),
+      );
+    };
+  }
+
+  if (suspended) return props.fallback ?? null;
   return props.children ?? null;
 }
 
@@ -421,6 +472,8 @@ export function resolveCompatType(type: unknown): unknown {
     };
     (wrappedForwardRef as any).displayName = exoticType.displayName
       ?? `ForwardRef(${(render as any).name || "anonymous"})`;
+    // Preserve $$typeof on the wrapper so react-is.isForwardRef(element) works.
+    (wrappedForwardRef as any).$$typeof = REACT_FORWARD_REF_TYPE;
     exoticTypeCache.set(type as object, wrappedForwardRef);
     return wrappedForwardRef;
   }
@@ -451,7 +504,7 @@ export function resolveCompatType(type: unknown): unknown {
       if (Array.isArray(children)) {
         return children.length === 1
           ? children[0] as VNode
-          : createElementImpl(Fragment, null, ...(children as ElementChild[]));
+          : createElementImpl(InternalFragment, null, ...(children as ElementChild[]));
       }
       return children as VNode;
     };
@@ -533,6 +586,7 @@ function normalizeChildrenSingle(vnode: any): any {
 export function createElement(type: unknown, props?: unknown, ...children: unknown[]): VNode {
   const effectiveType = resolveCompatType(type);
 
+  let vnode: VNode;
   if (typeof type === 'string' && props && typeof props === 'object') {
     const newProps = { ...props } as Record<string, unknown>;
     let hasChanges = false;
@@ -543,18 +597,29 @@ export function createElement(type: unknown, props?: unknown, ...children: unkno
       }
     }
     if (hasChanges) {
-        return normalizeChildrenSingle(createElementImpl(effectiveType as any, newProps, ...(children as any[])));
+      vnode = normalizeChildrenSingle(createElementImpl(effectiveType as any, newProps, ...(children as any[])));
+    } else {
+      vnode = normalizeChildrenSingle(createElementImpl(effectiveType as any, props as any, ...(children as any[])));
     }
+  } else {
+    vnode = normalizeChildrenSingle(createElementImpl(effectiveType as any, props as any, ...(children as any[])));
   }
 
-  return normalizeChildrenSingle(createElementImpl(effectiveType as any, props as any, ...(children as any[])));
+  // Stamp $$typeof so react-is.isValidElement / isFragment / isForwardRef etc.
+  // work correctly on VNodes produced by the compat layer.
+  (vnode as any).$$typeof = REACT_ELEMENT_TYPE;
+  return vnode;
 }
 
 // ---------------------------------------------------------------------------
 // Export
 // ---------------------------------------------------------------------------
 
-export { Fragment, memo };
+// Export the standard React fragment symbol so react-is.isFragment() works
+// correctly. The renderer recognises both this and the internal refract.fragment
+// symbol (see coreRenderer.ts REACT_FRAGMENT_TYPE).
+export const Fragment = Symbol.for("react.fragment");
+export { memo };
 export {
   createRef,
   registerExternalReactModule,
@@ -571,6 +636,7 @@ const ReactCompat = {
   PureComponent,
   Suspense,
   lazy,
+  use,
   createContext,
   createElement,
   cloneElement,
