@@ -109,7 +109,24 @@ function handleErrorBoundary(fiber: Fiber, error: unknown): boolean {
   return false;
 }
 
+function handleSuspenseBoundary(fiber: Fiber, error: unknown): boolean {
+  if (!(error instanceof Promise)) return false;
+  let current: Fiber | null = fiber.parent;
+  while (current) {
+    if (current._suspenseHandler) {
+      current._suspenseHandler(error as Promise<unknown>);
+      reconcileChildren(fiber, []);
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
 registerFiberCleanupHandler(cleanupFiberEffects);
 registerAfterCommitHandler(runPendingEffects);
 registerBeforeRenderBatchHandler(flushPassiveEffects);
+// Suspense must be registered before the error boundary so a thrown Promise
+// is caught by the nearest Suspense boundary before reaching any error boundary.
+registerRenderErrorHandler(handleSuspenseBoundary);
 registerRenderErrorHandler(handleErrorBoundary);
