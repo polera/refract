@@ -1,15 +1,6 @@
 import type { Fiber } from "./types.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const XLINK_NS = "http://www.w3.org/1999/xlink";
-const XML_NS = "http://www.w3.org/XML/1998/namespace";
-const XMLNS_NS = "http://www.w3.org/2000/xmlns/";
-const SVG_TAGS = new Set([
-  "svg", "circle", "ellipse", "line", "path", "polygon", "polyline",
-  "rect", "g", "defs", "use", "text", "tspan", "image", "clipPath",
-  "mask", "pattern", "marker", "linearGradient", "radialGradient", "stop",
-  "foreignObject", "symbol", "desc", "title",
-]);
 
 export type HtmlSanitizer = (html: string) => string;
 export type UnsafeUrlPropChecker = (key: string, value: unknown) => boolean;
@@ -73,7 +64,7 @@ export function createDom(fiber: Fiber): Node {
     return document.createTextNode(fiber.props.nodeValue as string);
   }
   const tag = fiber.type as string;
-  const isSvg = SVG_TAGS.has(tag) || isSvgContext(fiber);
+  const isSvg = tag === "svg" || isSvgContext(fiber);
   const el = isSvg
     ? document.createElementNS(SVG_NS, tag)
     : document.createElement(tag);
@@ -85,8 +76,8 @@ export function createDom(fiber: Fiber): Node {
 function isSvgContext(fiber: Fiber): boolean {
   let f = fiber.parent;
   while (f) {
+    if (f.type === "foreignObject") return false;
     if (f.type === "svg") return true;
-    if (typeof f.type === "string" && f.type !== "svg" && f.dom) return false;
     f = f.parent;
   }
   return false;
@@ -221,103 +212,6 @@ function normalizeAttributeName(key: string, isSvgElement: boolean): NormalizedA
     return { name: key, localName: key, namespaceURI: null };
   }
 
-  if (key.startsWith("xlink") && key.length > 5) {
-    const local = key.slice(5);
-    const localName = local.charAt(0).toLowerCase() + local.slice(1);
-    return { name: `xlink:${localName.toLowerCase()}`, localName: localName.toLowerCase(), namespaceURI: XLINK_NS };
-  }
-
-  if (key === "xmlnsXlink") {
-    return { name: "xmlns:xlink", localName: "xlink", namespaceURI: XMLNS_NS };
-  }
-
-  if (key.startsWith("xml") && key.length > 3) {
-    const local = key.slice(3);
-    const localName = local.charAt(0).toLowerCase() + local.slice(1);
-    return { name: `xml:${localName}`, localName, namespaceURI: XML_NS };
-  }
-
-  if (SVG_ATTR_CASE_PRESERVED.has(key) || key.startsWith("aria-") || key.startsWith("data-")) {
-    return { name: key, localName: key, namespaceURI: null };
-  }
-
-  if (SVG_ATTR_KEBAB_CASE.has(key)) {
-    const name = key.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
-    return { name, localName: name, namespaceURI: null };
-  }
-
-  return { name: key, localName: key, namespaceURI: null };
+  const name = key.replace(/xlink(H|:h)/, "h").replace(/sName$/, "s");
+  return { name, localName: name, namespaceURI: null };
 }
-
-const SVG_ATTR_CASE_PRESERVED = new Set([
-  "viewBox",
-  "preserveAspectRatio",
-  "gradientUnits",
-  "gradientTransform",
-  "patternUnits",
-  "patternContentUnits",
-  "patternTransform",
-  "maskUnits",
-  "maskContentUnits",
-  "filterUnits",
-  "primitiveUnits",
-  "pointsAtX",
-  "pointsAtY",
-  "pointsAtZ",
-  "markerUnits",
-  "markerWidth",
-  "markerHeight",
-  "refX",
-  "refY",
-  "stdDeviation",
-]);
-
-const SVG_ATTR_KEBAB_CASE = new Set([
-  "clipPath",
-  "clipRule",
-  "fillOpacity",
-  "fillRule",
-  "floodColor",
-  "floodOpacity",
-  "strokeDasharray",
-  "strokeDashoffset",
-  "strokeLinecap",
-  "strokeLinejoin",
-  "strokeMiterlimit",
-  "strokeOpacity",
-  "strokeWidth",
-  "stopColor",
-  "stopOpacity",
-  "fontFamily",
-  "fontSize",
-  "fontSizeAdjust",
-  "fontStretch",
-  "fontStyle",
-  "fontVariant",
-  "fontWeight",
-  "glyphOrientationHorizontal",
-  "glyphOrientationVertical",
-  "letterSpacing",
-  "wordSpacing",
-  "textAnchor",
-  "textDecoration",
-  "textRendering",
-  "dominantBaseline",
-  "alignmentBaseline",
-  "baselineShift",
-  "colorInterpolation",
-  "colorInterpolationFilters",
-  "colorProfile",
-  "colorRendering",
-  "imageRendering",
-  "shapeRendering",
-  "pointerEvents",
-  "lightingColor",
-  "unicodeBidi",
-  "renderingIntent",
-  "vectorEffect",
-  "writingMode",
-  "markerStart",
-  "markerMid",
-  "markerEnd",
-]);

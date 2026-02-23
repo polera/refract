@@ -30,7 +30,7 @@ This project is an experiment and uses code generated with both Claude Opus 4.6 
 - **memo** -- skip re-renders when props are unchanged
 - **Refs** -- createRef and callback refs via the `ref` prop
 - **Error boundaries** -- catch and recover from render errors
-- **SVG support** -- automatic SVG namespace handling
+- **SVG support** -- automatic SVG namespace handling (including `foreignObject` HTML fallback) with Preact-like SVG prop normalization (`xlinkHref`/`xlink:href` -> `href`, camelCase attrs preserved)
 - **dangerouslySetInnerHTML** -- raw HTML injection with sanitizer defaults in `refract/full` and configurable `setHtmlSanitizer` override
 - **Automatic batching** -- state updates are batched via microtask queue
 - **DevTools hook support** -- emits commit/unmount snapshots to a global hook or explicit hook instance
@@ -127,8 +127,8 @@ export default defineConfig({
 The compat layer is intentionally separate from core so users who do not need
 React ecosystem compatibility keep the smallest and fastest Refract bundles.
 
-Compatibility status (last verified February 22, 2026):
-- `yarn test`: 14 files passed, 91 tests passed
+Compatibility status (last verified February 23, 2026):
+- `yarn test`: 15 files passed, 100 tests passed
 - Compat-focused suites passed: `tests/compat.test.ts` (10), `tests/poc-compat.test.ts` (2), `tests/react-router-smoke.test.ts` (3)
 - Verified behaviors include `forwardRef`, portals, `createRoot`, JSX runtimes, `useSyncExternalStore`, `flushSync`, react-router tree construction/dispatcher bridging, `React.use` (Promise + context), and Suspense boundary fallback rendering
 
