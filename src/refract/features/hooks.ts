@@ -37,6 +37,16 @@ export function useState<T>(initial: T | (() => T)): [T, (value: T | ((prev: T) 
   if (!hook._setter) {
     hook._setter = (value: T | ((prev: T) => T)) => {
       if (!hook._fiber) return;
+      // Bail out for same-value direct updates with no pending queue (matches React behavior).
+      // This prevents infinite loops when setState(sameValue) is called in effects —
+      // e.g. MUI FormControl/InputBase calling setAdornedStart(false) repeatedly.
+      if (
+        typeof value !== "function" &&
+        Object.is(value, hook.state) &&
+        (!hook.queue || (hook.queue as unknown[]).length === 0)
+      ) {
+        return;
+      }
       const action = typeof value === "function"
         ? value as (prev: T) => T
         : () => value;
