@@ -164,6 +164,14 @@ export function applyProps(
             el.removeEventListener(event, getEventListener(oldProps[key]));
           }
           el.addEventListener(event, getEventListener(newProps[key]));
+        } else if (
+          !isSvgElement &&
+          (key === "value" || key === "checked") &&
+          (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT")
+        ) {
+          // Use DOM property for form element values (like React does), so that
+          // controlled inputs update their displayed value correctly.
+          (el as any)[key] = newProps[key] ?? (key === "checked" ? false : "");
         } else {
           const value = newProps[key];
           const attr = normalizeAttributeName(key, isSvgElement);
